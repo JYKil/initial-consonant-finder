@@ -49,14 +49,14 @@
 - [x] ~~Xcode에서 프로젝트 생성~~ → Swift Package로 대체
 - [x] `swift package init --type library --name KoreanInitialMatcher` 실행
 - [x] `.gitignore`에 Xcode / Swift Package Manager 항목 추가
-- [ ] **[다음 할 일]** `Sources/KoreanInitialMatcher/KoreanInitialMatcher.swift`에 실제 로직 작성
+- [x] `Sources/KoreanInitialMatcher/KoreanInitialMatcher.swift`에 실제 로직 작성
   - 한글 음절 범위(`0xAC00` ~ `0xD7A3`)에서 초성 인덱스 추출
   - 초성 테이블 19자 매핑
   - 비한글 문자는 소문자로 유지
-  - `public func extractChosung(_ text: String) -> String`
-  - `public func matches(name: String, query: String) -> Bool`
-- [ ] **[다음 할 일]** `Tests/KoreanInitialMatcherTests/KoreanInitialMatcherTests.swift`에 최소 20개 케이스 작성 (아래 리스트 참고)
-- [ ] **[다음 할 일]** `swift test` 실행 → 전부 초록 확인
+  - `public static func extractChosung(_ text: String) -> String`
+  - `public static func matches(name: String, query: String) -> Bool`
+- [x] `Tests/KoreanInitialMatcherTests/KoreanInitialMatcherTests.swift`에 24개 케이스 작성
+- [x] `swift test` 실행 → 전부 초록 확인 (24/24)
 - [ ] `Utils/KoreanInitialMatcher.swift` 파일 생성
 - [ ] `extractChosung(_:)` 함수 구현
   - 한글 음절 범위(`0xAC00` ~ `0xD7A3`)에서 초성 인덱스 추출
