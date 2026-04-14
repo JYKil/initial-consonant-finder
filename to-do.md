@@ -4,9 +4,9 @@
 
 ## 0단계: 준비
 
-- [ ] macOS에 최신 Xcode 15+ 설치
-- [ ] Apple ID로 Xcode 로그인 (Personal Team)
-- [ ] 실기기 테스트용 아이폰 준비 (USB 케이블 또는 같은 Wi-Fi)
+- [x] macOS에 최신 Xcode 15+ 설치
+- [x] Apple ID로 Xcode 로그인 (Personal Team)
+- [x] 실기기 테스트용 아이폰 준비 (USB 케이블 또는 같은 Wi-Fi)
 
 ### 주의사항 (폴더 구조 / Xcode 프로젝트 생성 시)
 
