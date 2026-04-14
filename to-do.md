@@ -57,28 +57,6 @@
   - `public static func matches(name: String, query: String) -> Bool`
 - [x] `Tests/KoreanInitialMatcherTests/KoreanInitialMatcherTests.swift`에 24개 케이스 작성
 - [x] `swift test` 실행 → 전부 초록 확인 (24/24)
-- [ ] `Utils/KoreanInitialMatcher.swift` 파일 생성
-- [ ] `extractChosung(_:)` 함수 구현
-  - 한글 음절 범위(`0xAC00` ~ `0xD7A3`)에서 초성 인덱스 추출
-  - 초성 테이블 19자 매핑
-  - 비한글 문자는 소문자로 유지
-- [ ] `matches(name:query:)` 함수 구현
-  - 쿼리를 초성 시퀀스로 변환 (이미 초성만 있으면 그대로)
-  - 이름의 초성 시퀀스에 쿼리가 포함되는지 확인
-- [ ] `Tests/KoreanInitialMatcherTests.swift` 작성 — 최소 20개 케이스:
-  - [ ] `"용훈미국"` → `"ㅇㅎㅁㄱ"`
-  - [ ] `"김철수"` → `"ㄱㅊㅅ"`
-  - [ ] `"ㅇㅎ"` 쿼리로 `"용훈미국"` 매칭됨
-  - [ ] `"ㅎㅁ"` 쿼리로 `"용훈미국"` 매칭됨 (연속 부분 일치)
-  - [ ] `"ㄱㅅ"` 쿼리로 `"용훈미국"` 매칭 안 됨 (중간 건너뜀 불가)
-  - [ ] 쌍자음 `"까불이"` → `"ㄲㅂㅇ"`
-  - [ ] `"John 김"` → 영문 일치 + 한글 초성 일치
-  - [ ] 공백/특수문자 포함 이름
-  - [ ] 한자 이름 (초성 추출 불가, 원문 일치로 대체)
-  - [ ] 빈 문자열, 빈 쿼리
-  - [ ] 이모지 포함 이름
-  - [ ] 나머지 8개+ 엣지 케이스
-- [ ] `Cmd+U`로 테스트 실행 → 전부 초록
 
 ## 2단계: 연락처 접근
 
@@ -110,6 +88,7 @@
 
 ## 4단계: 시뮬레이터 검증
 
+- [ ] Xcode에서 `Cmd+U`로 `KoreanInitialMatcher` 테스트 실행 → 전부 초록 (iOS 앱이 로컬 패키지를 올바르게 의존하는지 확인)
 - [ ] 앱 실행 시 키보드 즉시 올라옴 확인
 - [ ] "ㅇㅎ" 입력 시 해당 연락처만 필터됨
 - [ ] 결과 탭 → ActionSheet 정상
