@@ -21,20 +21,49 @@
 [ContactSearchView]  (SwiftUI, 단일 화면)
       │  @StateObject
       ▼
-[ContactStore: ObservableObject]
-  - requestAccess()   → 권한 요청
-  - loadAll()         → CNContactStore.enumerateContacts
-  - search(query)     → 인메모리 필터
+[ContactStore: ObservableObject]               ← 얇은 I/O 래퍼
+  - @Published contacts: [Contact]
+  - @Published query: String
+  - @Published results: [Contact]
+  - @Published loadState: LoadState            (idle/loading/loaded/failed)
+  - requestAccess()    → CNContactStore 권한
+  - loadAll()          → Task.detached(백그라운드)에서 enumerateContacts
+                         → ContactMapper.map 으로 변환
+                         → @MainActor 로 @Published 에 할당
+  - search(query)      → ContactFilter.apply 위임
       │
-      ▼
-[KoreanInitialMatcher]  (순수 함수, 테스트 대상)
-  - extractChosung(String) -> String
-  - matches(name, query) -> Bool
+      ├──────────────┬─────────────────┐
+      ▼              ▼                 ▼
+[ContactMapper]  [ContactFilter]  [KoreanInitialMatcher]
+(static 순수)    (static 순수)    (순수 함수, 1단계 산출물)
+CNContact        [Contact]+query  extractChosung / matches
+→ Contact?       → [Contact]
 ```
 
 - 외부 서버 0, DB 0, 로그인 0
 - 앱 시작 시 연락처를 메모리에 한 번 로드, 이후 인메모리 필터링
 - 연락처 100~1000개 수준에서는 이게 가장 빠르고 단순
+- `ContactMapper`와 `ContactFilter`는 `CNContactStore`에 의존하지 않는 static 순수 함수 — 단위 테스트 대상
+- 로드는 항상 백그라운드 스레드에서. UI 스레드는 절대 블록하지 않음
+
+## 권한 상태 머신
+
+```
+App launch
+  │
+  ▼
+CNContactStore.authorizationStatus(for: .contacts)
+  │
+  ├── .notDetermined → requestAccess
+  │                     ├── granted → loadAll
+  │                     └── denied  → PermissionDeniedView
+  ├── .authorized    → loadAll
+  ├── .limited       → loadAll            (iOS 18+, 허용된 것만 반환)
+  ├── .denied        → PermissionDeniedView ("설정에서 허용" 버튼)
+  └── .restricted    → PermissionDeniedView ("기기 정책으로 제한됨")
+```
+
+`.limited`는 v0.1에서 `.authorized`와 동일 처리. "일부만 보여요" 배너는 백로그.
 
 ## 핵심 알고리즘: 한글 초성 추출
 
@@ -48,9 +77,10 @@
 **엣지 케이스:**
 - 쌍자음 입력("ㄲ") → 그대로 매칭
 - 영문 섞인 이름("John 김") → 영문 부분 일치 + 한글 부분 초성 일치
-- 회사명만 있는 연락처 → 회사명도 검색 대상
-- 동명이인 → 전화번호 함께 표시
+- 회사명만 있는 연락처 → 회사명도 검색 대상 (`ContactMapper`에서 `fullName ?? organizationName`)
+- 동명이인 → 탭 시 `CNContactViewController`가 네이티브 상세 뷰에서 구분 표시
 - 연속 초성 일치("ㅇㅎ" → "용훈")가 단편 일치보다 우선순위 높음
+- 빈 query → 빈 결과 (검색 전 화면은 비어 있음)
 
 ## 화면 구조 (단일 화면)
 
@@ -58,7 +88,7 @@
 ┌─────────────────────────┐
 │  이름 일치 상위 항목       │
 │ ─────────────────        │
-│  [용] 용훈미국            │  ← 탭 → ActionSheet
+│  [용] 용훈미국            │  ← 탭 → 연락처 상세 시트
 │                          │
 │  ┌─────────────────┐     │
 │  │ 🔍 ㅇㅎ       ⓧ │  X  │
@@ -69,27 +99,36 @@
 └─────────────────────────┘
 ```
 
-**결과 셀 탭:** ActionSheet → `[전화걸기] [문자 보내기] [취소]`
-- 전화: `UIApplication.shared.open(URL(string: "tel://..."))`
-- 문자: `MFMessageComposeViewController` 모달
+**결과 셀 탭:** `CNContactViewController`를 `.sheet`로 present
+- iOS 기본 연락처 앱의 상세 화면과 동일한 UI (애플 공식 컴포넌트)
+- 전화/문자/이메일/편집 액션 전부 네이티브로 내장 — 우리 코드가 전화번호를 직접 다루지 않음
+- `UIViewControllerRepresentable`로 SwiftUI 래핑 (`Views/ContactDetailSheet.swift`, ~30줄)
+- 탭 시점에 `CNContactStore.unifiedContact(withIdentifier:keysToFetch:)`로 원본 `CNContact` 재조회 → 항상 최신 데이터
+- iOS에는 특정 연락처를 기본 연락처 앱에서 직접 여는 공식 URL 스킴이 없음 (`contacts://` 미지원). `CNContactViewController`가 표준 대안.
 
 ## 프로젝트 구조
 
 ```
 InitialConsonantFinder/
-├── InitialConsonantFinderApp.swift     # @main
+├── InitialConsonantFinderApp.swift     # @main, 권한 상태 머신 분기
 ├── Views/
 │   ├── ContactSearchView.swift          # 메인 화면
 │   ├── ContactRow.swift                 # 결과 셀
-│   └── PermissionDeniedView.swift       # 권한 거부 시 폴백
+│   ├── ContactDetailSheet.swift         # CNContactViewController 래퍼
+│   └── PermissionDeniedView.swift       # 권한 거부/제한 시 폴백
 ├── Models/
-│   ├── Contact.swift                    # 내부 struct
-│   └── ContactStore.swift               # ObservableObject
-├── Utils/
-│   └── KoreanInitialMatcher.swift       # 순수 함수
+│   ├── Contact.swift                    # id / displayName / searchKey
+│   ├── ContactStore.swift               # ObservableObject (I/O 래퍼)
+│   ├── ContactFilter.swift              # enum, static apply
+│   └── ContactMapper.swift              # enum, CNContact → Contact?
 ├── Info.plist                           # NSContactsUsageDescription
 └── Tests/
-    └── KoreanInitialMatcherTests.swift
+    ├── KoreanInitialMatcherTests.swift  # 1단계 산출물 (24개)
+    ├── ContactFilterTests.swift         # 2단계 신규
+    └── ContactMapperTests.swift         # 2단계 신규
+
+(참고: KoreanInitialMatcher 는 루트의 Swift Package 로 존재하고,
+ iOS 앱 타겟이 로컬 의존으로 이 패키지를 참조한다.)
 ```
 
 ## 필수 Info.plist 키
@@ -117,10 +156,10 @@ InitialConsonantFinder/
 
 ## 미해결 질문
 
-1. 검색 결과 정렬 가중치: 연속 초성 일치 vs 앞글자 일치
+1. 검색 결과 정렬 가중치: 연속 초성 일치 vs 앞글자 일치 (5단계 실사용 후 결정)
 2. 다국어 이름("John 김") 처리 규칙
 3. 앱 아이콘, 이름, 스크린샷 (v1 이후)
-4. 권한 거부 시 폴백 UX
+4. `CNContactViewController.allowsEditing` — 기본값 true 로 두고 실기기 테스트 후 재검토
 
 ## 관련 문서
 

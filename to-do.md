@@ -58,43 +58,59 @@
 - [x] `Tests/KoreanInitialMatcherTests/KoreanInitialMatcherTests.swift`에 24개 케이스 작성
 - [x] `swift test` 실행 → 전부 초록 확인 (24/24)
 
-## 2단계: 연락처 접근
+## 2단계: 연락처 접근 (UI 없음, 콘솔 로그까지)
 
 - [ ] `Info.plist`에 `NSContactsUsageDescription` 추가
-- [ ] `Models/Contact.swift` 정의 (`id`, `displayName`, `phoneNumbers: [String]`)
-- [ ] `Models/ContactStore.swift` 구현
+- [ ] `Models/Contact.swift` — `id: String`, `displayName: String`, `searchKey: String` (3필드, `Identifiable, Hashable`)
+- [ ] `Models/ContactMapper.swift` — `enum ContactMapper { static func map(_ cn: CNContact) -> Contact? }`
+  - [ ] `CNContactFormatter.string(style: .fullName) ?? organizationName` → displayName
+  - [ ] displayName 비어 있으면 `nil` 반환
+  - [ ] `searchKey = KoreanInitialMatcher.extractChosung(displayName)` 캐시
+- [ ] `Models/ContactFilter.swift` — `enum ContactFilter { static func apply(_ contacts: [Contact], query: String) -> [Contact] }`
+  - [ ] 빈 query → 빈 배열 반환
+  - [ ] 그 외는 `KoreanInitialMatcher.matches(name: searchKey, query:)` 필터
+- [ ] `Models/ContactStore.swift` 구현 (`@MainActor ObservableObject`)
   - [ ] `@Published var contacts: [Contact]`
-  - [ ] `@Published var query: String`
+  - [ ] `@Published var query: String` (Combine debounce 50ms 고려)
   - [ ] `@Published var results: [Contact]`
-  - [ ] `requestAccess()` — `CNContactStore.requestAccess`
-  - [ ] `loadAll()` — `enumerateContacts` → `Contact` 배열로 변환
-  - [ ] `search(_:)` — `KoreanInitialMatcher.matches`로 필터 + 정렬
+  - [ ] `@Published var loadState: LoadState` (`idle/loading/loaded/failed(Error)`)
+  - [ ] `requestAccess()` — `CNContactStore.requestAccess` 래핑, `.notDetermined/.authorized/.limited/.denied/.restricted` 5가지 분기
+  - [ ] `loadAll()` — `Task.detached(priority: .userInitiated)` 안에서 `enumerateContacts` 실행, 결과를 `ContactMapper.map`으로 변환, 메인 스레드로 `@Published`에 할당
+  - [ ] `search(_:)` — `ContactFilter.apply` 위임 (static 함수로 결과만 계산)
+- [ ] `Tests/ContactFilterTests.swift` — 최소 5개 (빈 query, 일치 없음, 단일 일치, 복수 일치, 회사명 케이스)
+- [ ] `Tests/ContactMapperTests.swift` — 최소 3개 (이름만, 회사명만, 둘 다 없음 → nil) using `CNMutableContact`
 - [ ] 시뮬레이터 연락처에 테스트 데이터 10개 추가
-- [ ] 콘솔 로그로 연락처 로드 동작 확인
+- [ ] 콘솔 로그로 권한 상태 + 로드된 연락처 개수 + 검색 결과 개수 확인
+- [ ] `swift test` → 전부 초록 (기존 24개 + 신규 8개 이상)
 
 ## 3단계: UI 조립
 
 - [ ] `Views/ContactSearchView.swift` — 목업대로 단일 화면
   - [ ] `TextField` + `FocusState`로 앱 열자마자 키보드 자동 활성
   - [ ] 결과 `List` — "이름 일치 상위 항목" 섹션 헤더
-  - [ ] 빈 결과 상태 처리
+  - [ ] 빈 결과 상태 처리 (빈 query / 일치 없음 구분)
   - [ ] 검은 배경 + 시스템 다크 모드 고정
-- [ ] `Views/ContactRow.swift` — 이니셜 원형 아바타 + 이름
-- [ ] 셀 탭 → ActionSheet `[전화] [문자] [취소]`
-  - [ ] 전화: `UIApplication.shared.open(URL(string: "tel://\(number)"))`
-  - [ ] 문자: `MFMessageComposeViewController` 모달 (SwiftUI `UIViewControllerRepresentable` 래퍼 필요)
-- [ ] `Views/PermissionDeniedView.swift` — 권한 거부 시 "설정 열기" 버튼
-- [ ] `InitialConsonantFinderApp.swift`에서 권한 상태에 따라 분기
+  - [ ] `loadState == .failed` 시 에러 뷰 + 재시도 버튼
+- [ ] `Views/ContactRow.swift` — 이니셜 원형 아바타 + 이름만 (전화번호 표시 없음)
+- [ ] `Views/ContactDetailSheet.swift` — `CNContactViewController`를 `UIViewControllerRepresentable`로 래핑
+  - [ ] `CNContactStore.unifiedContact(withIdentifier:keysToFetch:)`로 원본 재조회
+  - [ ] `keysToFetch`에 `CNContactViewController.descriptorForRequiredKeys()` 사용
+  - [ ] `UINavigationController`로 감싸야 "완료" 버튼이 뜸
+- [ ] `ContactSearchView`에서 셀 탭 → `@State var selectedContact: Contact?` → `.sheet(item:)`로 `ContactDetailSheet` present
+- [ ] `Views/PermissionDeniedView.swift` — `.denied/.restricted` 모두 커버, "설정 열기" 버튼 (`UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)`)
+- [ ] `InitialConsonantFinderApp.swift`에서 권한 상태 머신 5가지 분기 (`.notDetermined/.authorized/.limited/.denied/.restricted`)
 
 ## 4단계: 시뮬레이터 검증
 
 - [ ] Xcode에서 `Cmd+U`로 `KoreanInitialMatcher` 테스트 실행 → 전부 초록 (iOS 앱이 로컬 패키지를 올바르게 의존하는지 확인)
 - [ ] 앱 실행 시 키보드 즉시 올라옴 확인
 - [ ] "ㅇㅎ" 입력 시 해당 연락처만 필터됨
-- [ ] 결과 탭 → ActionSheet 정상
-- [ ] 전화 탭 → `tel://` 핸들러 (시뮬레이터는 실제 전화 안 됨, URL 열림 확인)
-- [ ] 문자 탭 → MessageUI 모달 뜸
-- [ ] 권한 거부 → `PermissionDeniedView` 표시
+- [ ] 빈 query → 결과 비어 있음 (전체 500개 뿌리지 않음)
+- [ ] 결과 셀 탭 → `CNContactViewController` 시트가 기본 연락처 앱과 동일한 UI로 뜸
+- [ ] 시트 안의 전화/문자/이메일 버튼이 네이티브로 동작 (시뮬레이터는 실제 통화 불가, URL 핸드오프만 확인 — 실제 통화는 5단계 실기기에서)
+- [ ] 시트 닫기 → 검색 상태/키보드 유지
+- [ ] 권한 거부 → `PermissionDeniedView` 표시, "설정 열기" 버튼 동작
+- [ ] iOS 18 `.limited` 권한 → 허용된 연락처만 보임 (크래시 없음)
 - [ ] 연락처 0개/5000개/한자 이름/이모지 이름 각각 크래시 없음
 
 ## 5단계: 실기기 테스트
