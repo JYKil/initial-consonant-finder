@@ -54,16 +54,19 @@ App launch
   ▼
 CNContactStore.authorizationStatus(for: .contacts)
   │
-  ├── .notDetermined → requestAccess
-  │                     ├── granted → loadAll
-  │                     └── denied  → PermissionDeniedView
-  ├── .authorized    → loadAll
-  ├── .limited       → loadAll            (iOS 18+, 허용된 것만 반환)
+  ├── .notDetermined → OnboardingView (평생 1회, 사전 설명)
+  │                     └── [시작하기] 탭 → requestAccess
+  │                                          ├── granted → ContactSearchView
+  │                                          └── denied  → PermissionDeniedView
+  ├── .authorized    → ContactSearchView  (Onboarding 스킵)
+  ├── .limited       → ContactSearchView  (Onboarding 스킵, iOS 18+)
   ├── .denied        → PermissionDeniedView ("설정에서 허용" 버튼)
   └── .restricted    → PermissionDeniedView ("기기 정책으로 제한됨")
 ```
 
-`.limited`는 v0.1에서 `.authorized`와 동일 처리. "일부만 보여요" 배너는 백로그.
+- `.limited`는 v0.1에서 `.authorized`와 동일 처리. "일부만 보여요" 배너는 백로그.
+- **OnboardingView 는 평생 1회만 표시된다.** `authorizationStatus == .notDetermined` 일 때만 분기하므로 `UserDefaults` 플래그 같은 건 불필요 — iOS 가 시스템 레벨에서 권한 상태를 기억한다. 앱 삭제 후 재설치 시에만 다시 표시됨(의도된 동작).
+- 설정 앱에서 수동으로 권한을 껐다 재진입하면 `.denied` 가 되어 Onboarding 대신 `PermissionDeniedView` 로 바로 진입.
 
 ## 핵심 알고리즘: 한글 초성 추출
 
@@ -82,40 +85,153 @@ CNContactStore.authorizationStatus(for: .contacts)
 - 연속 초성 일치("ㅇㅎ" → "용훈")가 단편 일치보다 우선순위 높음
 - 빈 query → 빈 결과 (검색 전 화면은 비어 있음)
 
+## 디자인 시스템: iOS HIG
+
+`DESIGN.md` 는 없다. **iOS Human Interface Guidelines 를 암묵적 기본 디자인 시스템으로 채택.** 네이티브 컴포넌트에 최대한 기대어 3단계 구현 비용을 최소화하고, "차별화 가설: 아무것도 없음" 을 UI 요소의 부재로 표현한다.
+
+| 요소        | 선택                                                                           |
+|-------------|--------------------------------------------------------------------------------|
+| 검색 입력   | `.searchable()` 모디파이어 (상단 배치)                                          |
+| 리스트      | `List` + `.plain` 스타일                                                       |
+| 컬러        | 시스템 컬러 (`.systemBackground`, `.primary`, `.secondaryLabel`, `.secondarySystemFill`) |
+| 컬러 모드   | 시스템 설정 따름 (`preferredColorScheme` 미지정)                               |
+| 타이포      | SF Pro (`.body`, `.headline`, `.largeTitle`) + Dynamic Type 자동              |
+| 아이콘      | SF Symbols (`magnifyingglass`, `phone.fill` 등)                               |
+| 행 높이     | `List` 기본 (44pt+ 자동, 터치 타깃 보장)                                      |
+| 구분선      | `List` 기본 hairline separator                                                |
+| 포커스      | `@FocusState` + `.searchable` 자동 포커스                                      |
+| 햅틱        | `List` 기본 selection feedback                                                |
+
+**금지 사항 (v0.1):**
+- 커스텀 폰트 도입 금지.
+- 커스텀 컬러 토큰 금지 — 시스템 컬러만.
+- 배경 그라디언트, 카드 섀도우, 커스텀 아바타 색 등 장식 요소 전부 금지.
+- 다크모드 강제(`preferredColorScheme(.dark)`) 금지 — 유저 시스템 설정 존중.
+
 ## 화면 구조 (단일 화면)
 
 ```
-┌─────────────────────────┐
-│  이름 일치 상위 항목       │
-│ ─────────────────        │
-│  [용] 용훈미국            │  ← 탭 → 연락처 상세 시트
-│                          │
-│  ┌─────────────────┐     │
-│  │ 🔍 ㅇㅎ       ⓧ │  X  │
-│  └─────────────────┘     │
-│  ┌─────────────────┐     │
-│  │   한글 키보드     │     │
-│  └─────────────────┘     │
-└─────────────────────────┘
+┌─────────────────────────────┐
+│ 🔍 Search                   │  ← .searchable() 시스템 검색바 (상단)
+├─────────────────────────────┤
+│  ⦿  용훈미국                 │  ← ContactRow (회색 원 + 이니셜 + 이름)
+│  ⦿  김철수                   │
+│  ⦿  이영희                   │
+│                              │
+│                              │
+├─────────────────────────────┤
+│        한글 키보드            │  ← 앱 오픈 즉시 자동 활성 (@FocusState)
+└─────────────────────────────┘
 ```
 
-**결과 셀 탭:** `CNContactViewController`를 `.sheet`로 present
-- iOS 기본 연락처 앱의 상세 화면과 동일한 UI (애플 공식 컴포넌트)
-- 전화/문자/이메일/편집 액션 전부 네이티브로 내장 — 우리 코드가 전화번호를 직접 다루지 않음
-- `UIViewControllerRepresentable`로 SwiftUI 래핑 (`Views/ContactDetailSheet.swift`, ~30줄)
-- 탭 시점에 `CNContactStore.unifiedContact(withIdentifier:keysToFetch:)`로 원본 `CNContact` 재조회 → 항상 최신 데이터
-- iOS에는 특정 연락처를 기본 연락처 앱에서 직접 여는 공식 URL 스킴이 없음 (`contacts://` 미지원). `CNContactViewController`가 표준 대안.
+**검색바:**
+- `NavigationStack { ... }.searchable(text: $store.query, placement: .navigationBarDrawer(displayMode: .always))` 로 구현.
+- iOS HIG 표준 → 스타일/다크모드/접근성/클리어 버튼/dismiss 제스처 전부 무료.
+- 앱 오픈 즉시 검색바에 포커스: `@FocusState` 로 자동 활성. 키보드 즉시 올라옴.
+- 리스트는 `.listStyle(.plain)` — 그룹 배경 제거, 행만 배경에 붙는 형태.
+
+**결과 셀 (`ContactRow`):**
+
+```
+┌───────────────────────────────┐
+│  ⦿   이름                      │
+│ (44×44pt)   (.body SF Pro)    │
+└───────────────────────────────┘
+```
+
+- 좌측: 44×44pt 회색 원(`.secondarySystemFill` 배경) + `displayName.first` 1자 가운데(`.headline`).
+- 우측: `displayName` 좌측 정렬, `.body`, `.primary`.
+- 애플 기본 연락처 앱 스타일과 동일. 컬러풀 아바타/커스텀 스타일 금지.
+- 탭 → `@State var selectedContact: Contact?` 업데이트 → `.sheet(item:)` 트리거.
+- `.accessibilityLabel("\(displayName), 연락처 상세 열기")`.
+
+**결과 셀 탭 → 상세 시트:** `CNContactViewController` 를 `.sheet` 로 present
+- iOS 기본 연락처 앱의 상세 화면과 동일한 UI (애플 공식 컴포넌트).
+- 전화/문자/이메일/편집 액션 전부 네이티브로 내장 — 우리 코드가 전화번호를 직접 다루지 않음.
+- `UIViewControllerRepresentable` 로 SwiftUI 래핑 (`Views/ContactDetailSheet.swift`, ~30줄).
+- `UINavigationController` 로 한 번 더 감싸야 "완료" 버튼이 자동 제공됨.
+- 탭 시점에 `CNContactStore.unifiedContact(withIdentifier:keysToFetch:)` 로 원본 `CNContact` 재조회 → 항상 최신 데이터.
+- `keysToFetch` 는 `CNContactViewController.descriptorForRequiredKeys()` 사용.
+- iOS 에는 특정 연락처를 기본 연락처 앱에서 직접 여는 공식 URL 스킴이 없음 (`contacts://` 미지원). `CNContactViewController` 가 표준 대안.
+- 시트 dismiss 후 `query` 와 `@FocusState` 는 SwiftUI 기본 동작으로 유지 → 키보드 자동 재활성, 연속 검색 자연스러움.
+
+## 상태별 화면 매트릭스
+
+3단계 View 는 `ContactStore.loadState` + `query` 조합에 따라 다음과 같이 분기한다.
+
+| 조건                        | loadState     | query  | 화면                                      |
+|-----------------------------|---------------|--------|-------------------------------------------|
+| 첫 실행, 권한 미결정         | `idle`        | `""`   | `OnboardingView` (사전 설명, 1회)          |
+| 권한 거부 / restricted       | `idle`        | `*`    | `PermissionDeniedView`                    |
+| 권한 있음, 로드 중 (<200ms)  | `.loading`    | `*`    | 검색바+키보드 활성, 리스트 빈              |
+| 권한 있음, 로드 중 (≥200ms)  | `.loading`    | `*`    | 위 + `ProgressView` 중앙                  |
+| 로드 완료, 쿼리 없음         | `.loaded`     | `""`   | 빈 리스트 영역 (문구 표시 없음)             |
+| 로드 완료, 매칭 있음         | `.loaded`     | `"ㅇㅎ"` | 결과 리스트                               |
+| 로드 완료, 매칭 없음         | `.loaded`     | `"ㅈ"`  | 빈 리스트 영역 (문구 표시 없음)             |
+| 로드 실패                    | `.failed(msg)` | `*`    | 중앙 에러 뷰 + `[다시 시도]` 버튼          |
+
+**핵심 동작 원칙:**
+
+- **로드 중에도 검색바/키보드는 즉시 활성.** 로드 중 타이핑해도 `ContactFilter.apply(loaded=[], query)` 결과는 빈 배열이지만, `loadState` 가 `.loaded` 로 전이되는 순간 `$contacts` 가 변동되고 `CombineLatest($query, $contacts)` 파이프라인이 자동으로 `$results` 재계산 → 이미 찍어둔 쿼리에 대한 결과가 즉시 채워진다. 유저 체감: "생각보다 빠르다."
+- **로딩 스피너는 200ms 이상 지속될 때만 표시.** 50~150ms 깜빡임은 산만함. 500연락처 cold boot 은 보통 150ms 내외라 대부분의 경우 스피너가 아예 안 뜸.
+  ```swift
+  .task {
+      try? await Task.sleep(for: .milliseconds(200))
+      if case .loading = store.loadState { showSpinner = true }
+  }
+  ```
+- **빈 결과 / 매칭 없음에 문구 표시하지 않는다.** 검색바와 키보드만 남아있는 상태가 이 앱의 기본 상태. 유저는 키보드 위에 아무것도 없으면 "입력하면 된다" 를 이미 암. 5단계 실사용 후 본인이 혼란스러우면 그때 문구 추가(백로그).
+
+## 사용자 여정 & 감정 궤적
+
+**5-second visceral:** 앱 아이콘 탭 → 0.3s 런치 → 키보드 이미 올라와 있음 → 엄지로 "ㅇㅎ" 타이핑 → 0.1s 안에 "용훈" 셀 등장 → 탭 → 네이티브 상세 → 전화. **총 2초 이내 통화 연결.** 이게 북극성.
+
+**5-minute behavioral:** 근육 기억. 의심 없음. 기본 연락처 앱을 안 열게 됨.
+
+**5-year reflective:** "초성 검색 없는 iOS 기본 연락처로 못 돌아가."
+
+**감정적으로 민감한 순간 3가지:**
+
+1. **첫 실행 권한 요청.** iOS 시스템 팝업은 한 번 "허용 안 함" 누르면 복구가 고통스럽다. `OnboardingView` 가 시스템 팝업 직전에 "이 앱은 연락처를 읽어서 초성 검색만 합니다. 서버로 아무것도 보내지 않아요" 메시지를 전달 → 거부 확률 낮춤. **평생 딱 한 번**만 보이는 화면이지만 가장 감정적으로 무거운 순간.
+2. **cold boot 로드 중.** 500연락처 로드 ~150ms. 타이핑은 즉시 허용, 로드 완료되는 순간 결과가 채워짐. 200ms 넘어가면 그제서야 스피너. 유저가 "앱이 고장났나?" 를 느끼지 않음.
+3. **상세 시트 닫고 돌아왔을 때.** `.sheet` dismiss 시 `query`, `@FocusState` 가 유지됨(SwiftUI 기본 동작). 키보드 자동 재활성. 연속 검색 UX 자연스러움.
+
+## 접근성 & 반응형
+
+**Dynamic Type:**
+- 모든 텍스트를 `.body` / `.headline` / `.largeTitle` 시스템 폰트로 사용 → Dynamic Type 자동 적용.
+- 검색바, 행 이름, OnboardingView 카피 전부 자동 확장.
+- 초대형(`.accessibility5`)에서 레이아웃 깨짐 확인은 4단계 시뮬레이터 검증 항목.
+
+**VoiceOver:**
+- `ContactRow`: `.accessibilityLabel("\(displayName), 연락처 상세 열기")`.
+- `.searchable()` 검색 필드: 기본 라벨 "검색" 자동.
+- `OnboardingView` [시작하기] 버튼: 기본 라벨 자동.
+
+**터치 타깃:**
+- `List` 행은 44pt+ 자동. 별도 지정 불필요.
+
+**뷰포트:**
+- iPhone SE (375pt) ~ Pro Max (430pt) 전부 동일 레이아웃.
+- 아이패드 대응은 v1+ 백로그.
+
+**Reduce Motion:**
+- SwiftUI `List` 기본 애니메이션이 자동 존중. 별도 처리 불필요.
+
+**컬러 대비:**
+- 시스템 컬러만 사용 → 라이트/다크 모두 WCAG AA 자동 만족.
 
 ## 프로젝트 구조
 
 ```
 InitialConsonantFinder/
-├── InitialConsonantFinderApp.swift     # @main, 권한 상태 머신 분기
+├── InitialConsonantFinderApp.swift     # @main, 권한 상태 머신 4갈래 분기
 ├── Views/
-│   ├── ContactSearchView.swift          # 메인 화면
-│   ├── ContactRow.swift                 # 결과 셀
+│   ├── OnboardingView.swift             # 사전 설명 화면 (.notDetermined 시 1회)
+│   ├── ContactSearchView.swift          # 메인 화면, .searchable() 상단
+│   ├── ContactRow.swift                 # 회색 원 + 이니셜 + 이름
 │   ├── ContactDetailSheet.swift         # CNContactViewController 래퍼
-│   └── PermissionDeniedView.swift       # 권한 거부/제한 시 폴백
+│   └── PermissionDeniedView.swift       # .denied / .restricted 폴백
 ├── Models/
 │   ├── Contact.swift                    # id / displayName / searchKey
 │   ├── ContactStore.swift               # ObservableObject (I/O 래퍼)
@@ -160,6 +276,8 @@ InitialConsonantFinder/
 2. 다국어 이름("John 김") 처리 규칙
 3. 앱 아이콘, 이름, 스크린샷 (v1 이후)
 4. `CNContactViewController.allowsEditing` — 기본값 true 로 두고 실기기 테스트 후 재검토
+5. `OnboardingView` 카피 최종안 — 방향은 "초성으로 빠르게 찾기 / 이 앱은 연락처를 읽어서 초성 검색만 합니다. 서버로 아무것도 보내지 않아요. 전부 기기 안에서." 정확한 문구는 3단계 구현 시 커밋
+6. 로딩 스피너 지연 임계치 200ms 가 실제로 적절한지 — 5단계 실기기 Instruments 측정 후 재조정 가능
 
 ## 관련 문서
 
