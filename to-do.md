@@ -88,84 +88,85 @@
 
 디자인 결정은 plan.md 의 "디자인 시스템: iOS HIG", "화면 구조", "상태별 화면 매트릭스", "사용자 여정", "접근성 & 반응형" 섹션을 최종 참조.
 
-### 3-1. Xcode 프로젝트 & 앱 타겟 생성
-- [ ] Xcode 에서 "iOS App" 프로젝트를 현재 레포 폴더 루트에 생성 (새 하위 폴더 만들기 체크 해제)
-- [ ] Team: Personal Team 선택
-- [ ] Bundle ID 결정 (예: `com.kilga.InitialConsonantFinder`)
-- [ ] Minimum Deployment Target: iOS 17 (Package.swift platforms 와 일치)
-- [ ] Interface: SwiftUI, Language: Swift
-- [ ] 로컬 Swift Package 의존 추가: `KoreanInitialMatcher`, `ContactFinder`
-- [ ] `Info.plist` 에 `NSContactsUsageDescription` 추가 (문구는 plan.md 필수 Info.plist 키 섹션)
-- [ ] `.gitignore` 에 Xcode 관련 항목 추가: `xcuserdata/`, `*.xcuserstate`, `DerivedData/`, `build/`
+**진행 상태:** 3-2 ~ 3-7 Swift 소스는 `App/` staging 폴더에 작성 완료 (커밋 `e3518c7`). 3-1 (Xcode 프로젝트 생성, 서명, Package 의존, Info.plist) 은 Xcode GUI 작업이라 사용자가 직접 수행. 상세 스텝은 `App/README.md` 참조.
+
+### 3-1. Xcode 프로젝트 & 앱 타겟 생성 ⚠️ **사용자 GUI 작업 필요**
+- [ ] Xcode → File → New → Project → iOS App
+  - Product Name: `InitialConsonantFinder`
+  - Team: 본인 Apple ID (Personal Team)
+  - Organization Identifier: 예) `com.kilga`
+  - Interface: SwiftUI, Language: Swift, Storage: None
+  - Include Tests 체크 해제
+- [ ] 저장 위치: 이 레포 루트, "Create Git Repository" 체크 해제
+- [ ] Target → General → Minimum Deployments: iOS 17.0
+- [ ] Target → Info → `Privacy - Contacts Usage Description` 추가, 값은 plan.md 필수 Info.plist 키 섹션 참조
+- [ ] File → Add Package Dependencies → Add Local → 레포 루트 선택 → `KoreanInitialMatcher` + `ContactFinder` 둘 다 체크
+- [ ] `App/` 의 6개 Swift 파일을 프로젝트 네비게이터로 드래그 (Create groups, Add to target: InitialConsonantFinder)
+- [ ] Xcode 자동 생성한 `InitialConsonantFinderApp.swift` + `ContentView.swift` 삭제 (Move to Trash)
+- [ ] `Cmd+B` → 빌드 성공
+- [ ] (빌드 성공 후) `App/` staging 폴더 정리 — `rm -rf App/` + 커밋
 
 ### 3-2. `@main` 앱 엔트리 (권한 상태 머신 4갈래)
-- [ ] `InitialConsonantFinderApp.swift`
-  - [ ] `@StateObject var store = ContactStore()`
-  - [ ] `CNContactStore.authorizationStatus(for: .contacts)` 로 루트 뷰 분기
-  - [ ] `.notDetermined` → `OnboardingView(store:)`
-  - [ ] `.authorized` / `.limited` → `ContactSearchView(store:)` + `.task { await store.loadAll() }`
-  - [ ] `.denied` / `.restricted` → `PermissionDeniedView(status:)`
+- [x] `App/InitialConsonantFinderApp.swift` — 작성 완료
+  - [x] `@StateObject var store = ContactStore()`
+  - [x] `@State var authStatus: CNAuthorizationStatus`
+  - [x] `.notDetermined` → `OnboardingView(onRequestAccess:)`
+  - [x] `.authorized` / `.limited` → `ContactSearchView(store:)` + `.task { await store.loadAll() }`
+  - [x] `.denied` / `.restricted` → `PermissionDeniedView(status:)`
+  - [x] `@unknown default` → `PermissionDeniedView(.denied)` 폴백
 
 ### 3-3. `OnboardingView` (사전 설명, 평생 1회)
-- [ ] `Views/OnboardingView.swift`
-  - [ ] 중앙 정렬: SF Symbol `magnifyingglass` (큰 사이즈, `.symbolRenderingMode(.hierarchical)`)
-  - [ ] 헤드라인: "초성으로 빠르게 찾기" (`.largeTitle`, `.bold`)
-  - [ ] 본문: "이 앱은 연락처를 읽어서 초성 검색만 합니다. 서버로 아무것도 보내지 않아요. 전부 기기 안에서." (`.body`, `.secondary`)
-  - [ ] 하단 Primary Button: "시작하기" → `Task { let status = await store.requestAccess(); /* 루트 뷰 갱신 */ }`
-  - [ ] 시스템 컬러만 사용 (커스텀 배경 금지)
+- [x] `App/Views/OnboardingView.swift` — 작성 완료
+  - [x] 중앙 SF Symbol `magnifyingglass` (72pt, `.symbolRenderingMode(.hierarchical)`)
+  - [x] 헤드라인: "초성으로 빠르게 찾기" (`.largeTitle.bold()`)
+  - [x] 본문 3줄: "이 앱은 연락처를 읽어서 초성 검색만 합니다. / 서버로 아무것도 보내지 않아요. / 전부 기기 안에서."
+  - [x] 하단 `buttonStyle(.borderedProminent)` "시작하기" → `onRequestAccess()` 호출
+  - [x] `@State isRequesting` 로 중복 탭 방지
+  - [x] 시스템 컬러만 사용
 
 ### 3-4. `ContactSearchView` (메인 화면, `.searchable()` 상단)
-- [ ] `Views/ContactSearchView.swift`
-  - [ ] `NavigationStack { List { ... } }` 구조
-  - [ ] `.searchable(text: $store.query, placement: .navigationBarDrawer(displayMode: .always))`
-  - [ ] `.listStyle(.plain)`
-  - [ ] `@FocusState` 로 오픈 즉시 검색바 포커스
-  - [ ] `List(store.results) { contact in ContactRow(contact: contact) }` + `.onTapGesture` → `selectedContact = contact`
-  - [ ] `@State var selectedContact: Contact?` → `.sheet(item: $selectedContact) { ContactDetailSheet(contactId: $0.id) }`
-  - [ ] `@State var showSpinner = false` + `.task(id: store.loadState)` 로 200ms 지연 스피너 노출:
-    ```swift
-    .task(id: store.loadState) {
-        if case .loading = store.loadState {
-            try? await Task.sleep(for: .milliseconds(200))
-            if case .loading = store.loadState { showSpinner = true }
-        } else {
-            showSpinner = false
-        }
-    }
-    ```
-  - [ ] `loadState == .failed(msg)` → 중앙 에러 뷰 + `[다시 시도]` 버튼 (`Task { await store.loadAll() }`)
-  - [ ] 빈 쿼리 / 매칭 없음 상태에는 문구 표시 없음 (빈 리스트 영역만)
+- [x] `App/Views/ContactSearchView.swift` — 작성 완료
+  - [x] `NavigationStack` + `.navigationTitle("연락처 검색")` + `.inline`
+  - [x] `.searchable(text: $store.query, isPresented: $isSearchActive, placement: .navigationBarDrawer(displayMode: .always), prompt: "이름 초성")`
+  - [x] `onAppear { isSearchActive = true }` — iOS 17 자동 포커스 (4단계 시뮬 검증 필요)
+  - [x] `.listStyle(.plain)`
+  - [x] `@State selectedContact: Contact?` → `.sheet(item:)` → `ContactDetailSheet`
+  - [x] 200ms 지연 스피너: `.task(id: isLoading) { await updateSpinnerVisibility() }`
+  - [x] `loadState == .failed(msg)` → 에러 뷰 + `[다시 시도]` 버튼
+  - [x] 빈 쿼리 / 매칭 없음 → 빈 리스트 (문구 없음)
 
 ### 3-5. `ContactRow` (애플 Contacts 스타일)
-- [ ] `Views/ContactRow.swift`
-  - [ ] `HStack(spacing: 12)`:
-    - [ ] `Circle().fill(Color(.secondarySystemFill)).frame(width: 44, height: 44).overlay(Text(String(contact.displayName.prefix(1))).font(.headline).foregroundStyle(.secondary))`
-    - [ ] `Text(contact.displayName).font(.body).foregroundStyle(.primary)`
-  - [ ] `.contentShape(Rectangle())` — 빈 공간도 탭 영역
-  - [ ] `.accessibilityElement(children: .combine)`
-  - [ ] `.accessibilityLabel("\(contact.displayName), 연락처 상세 열기")`
+- [x] `App/Views/ContactRow.swift` — 작성 완료
+  - [x] `HStack(spacing: 12)`: 44pt Circle(`.secondarySystemFill`) + 이니셜(`.headline`) + displayName(`.body`)
+  - [x] `.contentShape(Rectangle())`
+  - [x] `.accessibilityElement(children: .combine)`
+  - [x] `.accessibilityLabel("\(displayName), 연락처 상세 열기")`
+  - [x] `#Preview` 3개 케이스 (한글/한글/영문)
 
 ### 3-6. `ContactDetailSheet` (`CNContactViewController` 래퍼)
-- [ ] `Views/ContactDetailSheet.swift`
-  - [ ] `struct ContactDetailSheet: UIViewControllerRepresentable`
-  - [ ] `makeUIViewController` 에서 `CNContactStore().unifiedContact(withIdentifier: contactId, keysToFetch: [CNContactViewController.descriptorForRequiredKeys()])` 재조회
-  - [ ] 조회 실패 시 에러 뷰 폴백
-  - [ ] `CNContactViewController(for: fetchedContact)` → `UINavigationController(rootViewController:)` 로 감싸기 (완료 버튼 확보)
-  - [ ] `allowsEditing = true` (기본값 유지)
+- [x] `App/Views/ContactDetailSheet.swift` — 작성 완료
+  - [x] `struct ContactDetailSheet: UIViewControllerRepresentable`
+  - [x] `CNContactStore().unifiedContact(withIdentifier:keysToFetch:)` 재조회
+  - [x] `keysToFetch = [CNContactViewController.descriptorForRequiredKeys()]`
+  - [x] 조회 실패 시 "연락처를 불러올 수 없어요" 폴백 뷰
+  - [x] `UINavigationController(rootViewController:)` 로 감쌈 + 우상단 `.done` 버튼
+  - [x] `Coordinator` 로 `@Environment(\.dismiss)` 연결
+  - [x] `allowsEditing = true`, `allowsActions = true`
 
 ### 3-7. `PermissionDeniedView`
-- [ ] `Views/PermissionDeniedView.swift`
-  - [ ] 중앙 설명 텍스트 + "설정 열기" 버튼
-  - [ ] 버튼: `UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)`
-  - [ ] `.denied` vs `.restricted` 분기 카피:
-    - `.denied`: "연락처 접근 권한이 꺼져 있어요. 설정에서 켜주세요."
-    - `.restricted`: "이 기기는 정책상 연락처 접근이 제한돼 있어요."
+- [x] `App/Views/PermissionDeniedView.swift` — 작성 완료
+  - [x] SF Symbol `person.crop.circle.badge.exclamationmark` (64pt)
+  - [x] 제목 "연락처 접근이 필요해요" (`.title2.bold()`)
+  - [x] `.denied` vs `.restricted` 분기 카피
+  - [x] `.denied` 일 때만 "설정 열기" 버튼 표시
+  - [x] 버튼: `UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)`
+  - [x] `#Preview` 2개 (denied / restricted)
 
-### 3-8. 디자인 정합 체크 (구현 완료 후 최종 검증)
+### 3-8. 디자인 정합 체크 (Xcode 통합 + 빌드 성공 후 최종 검증)
 - [ ] `preferredColorScheme` 지정 없음 (시스템 따름)
 - [ ] 커스텀 `Font` / `Color` 사용 0개 — 시스템 토큰만
 - [ ] 배경 그라디언트, 카드 섀도우, 장식 요소 0개
-- [ ] `.body` / `.headline` / `.largeTitle` 외의 하드코딩된 `.system(size:)` 없음
+- [ ] 하드코딩된 `.system(size:)` 가 OnboardingView 의 `magnifyingglass`(72pt), PermissionDeniedView 의 아이콘(64pt) 외에는 없음
 - [ ] 모든 텍스트가 Dynamic Type 자동 적용 (`.font(.body)` 등 사용)
 
 ## 4단계: 시뮬레이터 검증
