@@ -5,11 +5,19 @@ import PackageDescription
 
 let package = Package(
     name: "KoreanInitialMatcher",
+    platforms: [
+        .iOS(.v17),
+        .macOS(.v14)
+    ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "KoreanInitialMatcher",
             targets: ["KoreanInitialMatcher"]
+        ),
+        .library(
+            name: "ContactFinder",
+            targets: ["ContactFinder"]
         ),
     ],
     targets: [
@@ -21,6 +29,14 @@ let package = Package(
         .testTarget(
             name: "KoreanInitialMatcherTests",
             dependencies: ["KoreanInitialMatcher"]
+        ),
+        .target(
+            name: "ContactFinder",
+            dependencies: ["KoreanInitialMatcher"]
+        ),
+        .testTarget(
+            name: "ContactFinderTests",
+            dependencies: ["ContactFinder", "KoreanInitialMatcher"]
         ),
     ],
     swiftLanguageModes: [.v6]

@@ -60,28 +60,29 @@
 
 ## 2단계: 연락처 접근 (UI 없음, 콘솔 로그까지)
 
-- [ ] `Info.plist`에 `NSContactsUsageDescription` 추가
-- [ ] `Models/Contact.swift` — `id: String`, `displayName: String`, `searchKey: String` (3필드, `Identifiable, Hashable`)
-- [ ] `Models/ContactMapper.swift` — `enum ContactMapper { static func map(_ cn: CNContact) -> Contact? }`
-  - [ ] `CNContactFormatter.string(style: .fullName) ?? organizationName` → displayName
-  - [ ] displayName 비어 있으면 `nil` 반환
-  - [ ] `searchKey = KoreanInitialMatcher.extractChosung(displayName)` 캐시
-- [ ] `Models/ContactFilter.swift` — `enum ContactFilter { static func apply(_ contacts: [Contact], query: String) -> [Contact] }`
-  - [ ] 빈 query → 빈 배열 반환
-  - [ ] 그 외는 `KoreanInitialMatcher.matches(name: searchKey, query:)` 필터
-- [ ] `Models/ContactStore.swift` 구현 (`@MainActor ObservableObject`)
-  - [ ] `@Published var contacts: [Contact]`
-  - [ ] `@Published var query: String` (Combine debounce 50ms 고려)
-  - [ ] `@Published var results: [Contact]`
-  - [ ] `@Published var loadState: LoadState` (`idle/loading/loaded/failed(Error)`)
-  - [ ] `requestAccess()` — `CNContactStore.requestAccess` 래핑, `.notDetermined/.authorized/.limited/.denied/.restricted` 5가지 분기
-  - [ ] `loadAll()` — `Task.detached(priority: .userInitiated)` 안에서 `enumerateContacts` 실행, 결과를 `ContactMapper.map`으로 변환, 메인 스레드로 `@Published`에 할당
-  - [ ] `search(_:)` — `ContactFilter.apply` 위임 (static 함수로 결과만 계산)
-- [ ] `Tests/ContactFilterTests.swift` — 최소 5개 (빈 query, 일치 없음, 단일 일치, 복수 일치, 회사명 케이스)
-- [ ] `Tests/ContactMapperTests.swift` — 최소 3개 (이름만, 회사명만, 둘 다 없음 → nil) using `CNMutableContact`
-- [ ] 시뮬레이터 연락처에 테스트 데이터 10개 추가
-- [ ] 콘솔 로그로 권한 상태 + 로드된 연락처 개수 + 검색 결과 개수 확인
-- [ ] `swift test` → 전부 초록 (기존 24개 + 신규 8개 이상)
+**진행 상태:** Swift Package 내 신규 타겟 `ContactFinder` 로 구현 완료. iOS 앱 타겟 연결 + 시뮬레이터 수동 검증은 3단계에서 함께.
+
+- [x] Swift Package `Package.swift` 에 `ContactFinder` 라이브러리 + 테스트 타겟 추가 (iOS 17/ macOS 14)
+- [x] `Sources/ContactFinder/Contact.swift` — `id`, `displayName`, `searchKey` 3필드 Sendable struct
+- [x] `Sources/ContactFinder/LoadState.swift` — `idle/loading/loaded/failed(String)`
+- [x] `Sources/ContactFinder/ContactMapper.swift` — `static func map(_:) -> Contact?`, `static func fetchKeys()`
+  - [x] `CNContactFormatter.string(style: .fullName) ?? organizationName` → displayName
+  - [x] displayName 비어 있으면 `nil` 반환
+  - [x] `searchKey = KoreanInitialMatcher.extractChosung(displayName)` 캐시
+- [x] `Sources/ContactFinder/ContactFilter.swift` — `static func apply(_:query:)`
+  - [x] 빈/공백 query → 빈 배열
+  - [x] 그 외는 `KoreanInitialMatcher.matches(name: searchKey, query:)` 필터
+- [x] `Sources/ContactFinder/ContactStore.swift` — `@MainActor ObservableObject`
+  - [x] `@Published contacts / query / results / loadState`
+  - [x] init 에서 `Publishers.CombineLatest($query, $contacts)` → `ContactFilter.apply` → `$results`
+  - [x] `requestAccess()` — 5가지 권한 상태 분기 (결과는 호출측이 분기)
+  - [x] `loadAll()` — `nonisolated static` 헬퍼로 백그라운드 enumerate, 결과만 MainActor 로 할당
+- [x] `Tests/ContactFinderTests/ContactFilterTests.swift` — 8개 케이스
+- [x] `Tests/ContactFinderTests/ContactMapperTests.swift` — 7개 케이스 (`CNMutableContact` 직접 생성)
+- [x] `swift test` → 전부 초록 (KoreanInitialMatcher 24개 + ContactFilter 8개 + ContactMapper 7개)
+- [ ] `Info.plist` 에 `NSContactsUsageDescription` 추가 **→ 3단계에서 iOS 앱 타겟 만들 때 함께**
+- [ ] 시뮬레이터 연락처 테스트 데이터 10개 추가 **→ 3단계**
+- [ ] 콘솔 로그로 권한/로드/검색 동작 확인 **→ 3단계**
 
 ## 3단계: UI 조립
 
