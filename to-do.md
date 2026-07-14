@@ -317,6 +317,28 @@ iOS 는 앱이 지원하는 로컬라이제이션 목록으로 앱의 실행 로
 `developmentLanguage: ko` 폴백으로 한국어가 뜬다 — 의도한 동작이다. 다국어를 지원할 계획이 생기면
 `en.lproj` 를 추가하고 앱 내 한국어 리터럴부터 `Localizable.xcstrings` 로 빼야 한다.
 
+### 4-2. 빈 쿼리 정책 변경: 기본 연락처 앱처럼 전체 목록 표시
+
+**배경:** 4단계에서는 "아무것도 없음" 철학에 따라 빈 쿼리 → 빈 리스트가 의도된 동작이었다.
+그런데 실제 배포 후 써보니 기본 연락처 앱처럼 입력 전에도 전체 연락처 목록(가나다순)이
+보이길 원한다는 피드백. 정책을 변경한다.
+
+- [x] `Sources/ContactFinder/ContactFilter.swift` — 빈/공백 쿼리일 때 빈 배열 대신
+      `displayName` 기준 `localizedStandardCompare` 정렬한 전체 목록 반환
+- [x] `Tests/ContactFinderTests/ContactFilterTests.swift` — `test_emptyQuery_returnsEmpty` /
+      `test_whitespaceOnlyQuery_returnsEmpty` 를 전체 목록 반환 기대값으로 교체
+- [x] `DevTools/UITests/SearchUITests.swift` — `test_빈쿼리는_빈리스트다` →
+      `test_빈쿼리는_전체목록을_보여준다` 로 교체 (전체 목록이 보이는지 확인)
+- [x] `./DevTools/verify.sh` 전체 재실행으로 회귀 확인 — UI 테스트 15개 + 단위 테스트 39개 전부 통과
+- [x] `InitialConsonantFinder/Views/ContactDetailSheet.swift` — 좌상단 "완료" 텍스트 버튼을
+      기본 연락처 앱과 동일한 텍스트 없는 뒤로가기 화살표(`chevron.backward`)로 교체.
+      접근성 라벨은 ko.lproj 덕분에 시스템이 자동으로 "뒤로" 를 붙여준다.
+      → `SearchUITests.test_결과탭하면_연락처_상세시트가_뜬다` 와
+      `AccessibilityUITests.test_다양한_외형에서_레이아웃이_안깨진다` 가 `app.buttons["완료"]`
+      를 찾다가 깨져서 `app.buttons["뒤로"]` 로 갱신함
+- [x] `plan.md` 의 "빈 query → 빈 결과" 관련 서술(핵심 알고리즘 엣지케이스, 상태별 화면 매트릭스,
+      핵심 동작 원칙 섹션) 을 새 정책에 맞게 갱신
+
 ## 5단계: 실기기 테스트
 
 - [ ] Xcode에서 본인 아이폰을 Run target으로 선택

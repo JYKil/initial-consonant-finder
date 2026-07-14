@@ -83,7 +83,7 @@ CNContactStore.authorizationStatus(for: .contacts)
 - 회사명만 있는 연락처 → 회사명도 검색 대상 (`ContactMapper`에서 `fullName ?? organizationName`)
 - 동명이인 → 탭 시 `CNContactViewController`가 네이티브 상세 뷰에서 구분 표시
 - 연속 초성 일치("ㅇㅎ" → "용훈")가 단편 일치보다 우선순위 높음
-- 빈 query → 빈 결과 (검색 전 화면은 비어 있음)
+- 빈 query → 전체 연락처를 이름 가나다순으로 정렬해 반환 (기본 연락처 앱과 동일한 첫 화면)
 
 ## 디자인 시스템: iOS HIG
 
@@ -165,7 +165,7 @@ CNContactStore.authorizationStatus(for: .contacts)
 | 권한 거부 / restricted       | `idle`        | `*`    | `PermissionDeniedView`                    |
 | 권한 있음, 로드 중 (<200ms)  | `.loading`    | `*`    | 검색바+키보드 활성, 리스트 빈              |
 | 권한 있음, 로드 중 (≥200ms)  | `.loading`    | `*`    | 위 + `ProgressView` 중앙                  |
-| 로드 완료, 쿼리 없음         | `.loaded`     | `""`   | 빈 리스트 영역 (문구 표시 없음)             |
+| 로드 완료, 쿼리 없음         | `.loaded`     | `""`   | 전체 연락처 목록 (이름 가나다순, 기본 연락처 앱과 동일) |
 | 로드 완료, 매칭 있음         | `.loaded`     | `"ㅇㅎ"` | 결과 리스트                               |
 | 로드 완료, 매칭 없음         | `.loaded`     | `"ㅈ"`  | 빈 리스트 영역 (문구 표시 없음)             |
 | 로드 실패                    | `.failed(msg)` | `*`    | 중앙 에러 뷰 + `[다시 시도]` 버튼          |
@@ -180,7 +180,8 @@ CNContactStore.authorizationStatus(for: .contacts)
       if case .loading = store.loadState { showSpinner = true }
   }
   ```
-- **빈 결과 / 매칭 없음에 문구 표시하지 않는다.** 검색바와 키보드만 남아있는 상태가 이 앱의 기본 상태. 유저는 키보드 위에 아무것도 없으면 "입력하면 된다" 를 이미 암. 5단계 실사용 후 본인이 혼란스러우면 그때 문구 추가(백로그).
+- **빈 쿼리는 전체 연락처 목록을 보여준다.** 기본 연락처 앱과 동일한 첫인상을 위해 v0.1의 "아무것도 없음" 철학에서 정책을 변경함(4-2단계). `ContactFilter.apply` 가 빈/공백 쿼리일 때 `displayName` 기준 정렬된 전체 목록을 반환한다.
+- **매칭 없음(예: "ㅋㅋㅋ")에는 여전히 문구 표시하지 않는다.** 빈 리스트 영역만 남는다. 유저는 키보드 위에 아무것도 없으면 "일치하는 연락처가 없다" 를 이미 암. 5단계 실사용 후 본인이 혼란스러우면 그때 문구 추가(백로그).
 
 ## 사용자 여정 & 감정 궤적
 

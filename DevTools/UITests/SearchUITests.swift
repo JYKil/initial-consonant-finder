@@ -40,10 +40,12 @@ final class SearchUITests: XCTestCase {
     attachScreenshot(named: "search-ㅇㅎ")
   }
 
-  func test_빈쿼리는_빈리스트다() {
+  func test_빈쿼리는_전체목록을_보여준다() {
     let field = app.searchFields.firstMatch
     XCTAssertTrue(field.waitForExistence(timeout: 5))
-    XCTAssertFalse(app.staticTexts["김용훈"].exists, "빈 쿼리인데 결과가 보인다")
+    XCTAssertTrue(
+      app.staticTexts["김용훈"].waitForExistence(timeout: 3),
+      "빈 쿼리인데 기본 연락처 앱처럼 전체 목록이 보이지 않는다")
   }
 
   func test_매칭없는_쿼리는_빈리스트다() {
@@ -85,8 +87,10 @@ final class SearchUITests: XCTestCase {
     let sheetBar = app.navigationBars["CNContactView"]
     XCTAssertTrue(sheetBar.waitForExistence(timeout: 5), "상세 시트가 안 뜬다")
 
-    let done = app.buttons["완료"]
-    XCTAssertTrue(done.waitForExistence(timeout: 3), "완료 버튼이 없다")
+    // 왼쪽은 기본 연락처 앱처럼 텍스트 없는 뒤로가기 화살표(chevron.backward)다.
+    // 접근성 라벨은 ko.lproj 덕분에 시스템이 자동으로 "뒤로" 를 붙여준다.
+    let back = sheetBar.buttons["뒤로"]
+    XCTAssertTrue(back.waitForExistence(timeout: 3), "뒤로가기 버튼이 없다")
 
     // CNContactViewController 가 소유한 버튼. ko.lproj 가 없으면 "Edit" 으로 뜬다.
     XCTAssertTrue(sheetBar.buttons["편집"].exists, "Edit 버튼이 한국어로 안 뜬다 — ko 로컬라이제이션 확인")
@@ -95,9 +99,9 @@ final class SearchUITests: XCTestCase {
     attachScreenshot(named: "detail-sheet")
 
     // 시트를 닫으면 검색 쿼리가 유지된 채 검색 화면으로 돌아와야 한다.
-    done.tap()
+    back.tap()
     XCTAssertFalse(
-      sheetBar.waitForExistence(timeout: 2), "완료를 눌렀는데 시트가 안 닫힘")
+      sheetBar.waitForExistence(timeout: 2), "뒤로가기를 눌렀는데 시트가 안 닫힘")
     XCTAssertEqual(
       app.searchFields.firstMatch.value as? String, "ㄱㅊㅅ", "시트 닫은 뒤 검색 쿼리가 날아갔다")
   }

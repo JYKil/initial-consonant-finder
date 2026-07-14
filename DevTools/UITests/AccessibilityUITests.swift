@@ -25,7 +25,10 @@ final class AccessibilityUITests: XCTestCase {
     XCTAssertTrue(row.isHittable, "김용훈 셀을 탭할 수 없다 (Dynamic Type 에서 레이아웃 붕괴 의심)")
 
     row.tap()
-    XCTAssertTrue(app.buttons["완료"].waitForExistence(timeout: 5), "상세 시트 완료 버튼이 없다 (Dynamic Type 에서 시트 레이아웃 붕괴 의심)")
+    // 뒤로가기는 텍스트 없는 chevron.backward 아이콘 — 접근성 라벨 "뒤로" 로 찾는다.
+    XCTAssertTrue(
+      app.buttons["뒤로"].waitForExistence(timeout: 5),
+      "상세 시트 뒤로가기 버튼이 없다 (Dynamic Type 에서 시트 레이아웃 붕괴 의심)")
 
     let shot = XCTAttachment(screenshot: app.screenshot())
     shot.name = "layout-check"

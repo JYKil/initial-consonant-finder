@@ -8,14 +8,16 @@ final class ContactFilterTests: XCTestCase {
 
   // MARK: - 빈 쿼리 정책
 
-  func test_emptyQuery_returnsEmpty() {
-    let all = [make("1", "김철수", "ㄱㅊㅅ"), make("2", "이영희", "ㅇㅇㅎ")]
-    XCTAssertTrue(ContactFilter.apply(all, query: "").isEmpty)
+  func test_emptyQuery_returnsAllSortedByName() {
+    let all = [make("1", "이영희", "ㅇㅇㅎ"), make("2", "김철수", "ㄱㅊㅅ")]
+    let result = ContactFilter.apply(all, query: "")
+    XCTAssertEqual(result.map { $0.displayName }, ["김철수", "이영희"])
   }
 
-  func test_whitespaceOnlyQuery_returnsEmpty() {
-    let all = [make("1", "김철수", "ㄱㅊㅅ")]
-    XCTAssertTrue(ContactFilter.apply(all, query: "   ").isEmpty)
+  func test_whitespaceOnlyQuery_returnsAllSortedByName() {
+    let all = [make("1", "이영희", "ㅇㅇㅎ"), make("2", "김철수", "ㄱㅊㅅ")]
+    let result = ContactFilter.apply(all, query: "   ")
+    XCTAssertEqual(result.map { $0.displayName }, ["김철수", "이영희"])
   }
 
   // MARK: - 매칭
