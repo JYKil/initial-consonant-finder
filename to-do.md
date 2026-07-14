@@ -233,18 +233,56 @@ xcodebuild -scheme InitialConsonantFinder \
 - [x] 시스템 문자열 한국어 확인 (편집 / 검색 / 텍스트 지우기)
 - [x] 한자("강民秀") / 이모지("한소리🌸") 이름 크래시 없음 (시딩 픽스처에 포함)
 
+### 병렬 검증 자동화 완료 (`DevTools/verify-parallel.sh`, XCUITest 16개 실행 전부 통과)
+
+`verify.sh`(순차, 단일 디바이스)로는 못 보는 항목 — 여러 디바이스에서만 의미 있는 것들.
+`build-for-testing` 으로 1회 빌드 후 `test-without-building` 으로 4개 시뮬레이터(iPhone 17 /
+iPhone SE 3rd gen / iPhone 17 Pro Max / iPhone Air)에 나눠 돌린다.
+
+- [x] 앱 삭제 후 재설치 → `OnboardingView` 재등장. 문자 그대로의 `simctl uninstall`+`install` 은
+      아래 3번 이유로 테스트 자동화에 못 쓰고, 최종적으로 `simctl privacy reset` 방식(사용자 삭제가
+      실제로 하는 일인 TCC 초기화)으로 XCUITest 검증 완료 — 별도로 uninstall+install 조합도
+      스크린샷으로 한 번 더 실측 확인함(둘 다 온보딩 재등장 확인)
+- [x] iOS 18 `.limited` 권한(2단계에서 [연락처 선택] → 피커에서 일부만 선택) → **선택한 연락처만**
+      보이고 나머지는 안 보임, 크래시 없음 (`test_limited_권한선택시_선택한_연락처만_보인다`)
+- [x] 다크모드(Pro Max) / 라이트모드(SE) 전환 → 시스템 따라 자동 변경, 레이아웃 안 깨짐
+- [x] Dynamic Type 최대(`.accessibility5`, Pro Max 에 세팅) → 셀 hittable 유지, 시트 레이아웃 안 깨짐
+- [x] VoiceOver 라벨 — 전용 XCUITest 로 "이름, 연락처 상세 열기" 형식 확정 검증 (SE/Pro Max 둘 다)
+- [x] iPhone SE (375pt) 와 Pro Max (430pt) 두 뷰포트에서 동일 테스트 스위트 통과
+- [x] 연락처 0개 → 크래시 없이 빈 리스트
+- [x] 연락처 5000개 → 크래시 없이 로드되고 "ㄱㅇㅎ" 검색으로 확정 픽스처 발견됨
+      (⚠️ **2초 목표 자체는 여기서 판정 안 함** — 시뮬레이터 + XCUITest 드라이버 오버헤드가 섞여 실측
+      6.35초 나옴. 진짜 2초 판정은 5단계 실기기에서 Instruments Time Profiler 로.)
+
+**병렬화 과정에서 디버깅하며 알게 된 것 3가지:**
+
+1. **동시 실행 때문이라는 첫 진단은 틀렸다.** 처음엔 "재설치 테스트를 다른 xcodebuild 프로세스와
+   동시에 돌리면 실패한다"고 봤는데, 단독 실행으로 바꿔도 똑같이 실패해서 오진으로 판명났다.
+2. **진짜 원인 ①: 디바이스 이름 충돌.** 이 머신에 iOS 26.4 / 26.5 런타임이 둘 다 깔려 있어서
+   "iPhone 17" 같은 이름의 시뮬레이터가 **UDID 가 다른 두 개**로 동시에 존재한다
+   (`simctl list devices` 로 확인). `simctl <verb> "이름"` 과 `xcodebuild -destination name=...`
+   이 이 모호함을 서로 다르게 풀어서, `simctl` 로 재설치한 디바이스와 `xcodebuild` 가 테스트를
+   돌리는 디바이스가 물리적으로 다른 시뮬레이터가 됐다 → **UDID 로 확정**해서 해결.
+3. **진짜 원인 ②: UDID를 고정해도 여전히 실패.** `simctl uninstall` + `install` 은 그 디바이스에서
+   **이전에 `xcodebuild test-without-building` 세션이 한 번이라도 돈 적이 있으면** 더 이상 TCC 를
+   리셋하지 않는다 — 재설치해도 authorized 로 남는다(Xcode 온디바이스 테스트 에이전트가 뭔가
+   pairing/daemon 상태를 남기는 것으로 추정). 실사용자는 `xcodebuild test` 를 거칠 일이 없으니
+   앱 버그가 아니라 테스트 도구의 한계다. "삭제 후 재설치" 가 실제로 검증하려는 건 **TCC 초기화**
+   뿐이므로(이 앱엔 UserDefaults 등 다른 영속 상태가 없음 — `ContactStore.swift` 확인됨),
+   문자 그대로의 uninstall/install 대신 `simctl privacy reset` 으로 대체했다. `verify.sh` 의
+   동일 테스트도 원래 이 방식으로 통과하고 있었다.
+
+macOS 시스템 bash 는 3.2 라 `declare -A`(연관 배열)이 없다. 스크립트는 평범한 변수로 대체했다.
+`"$VAR개"` 처럼 변수 뒤에 한글이 바로 붙으면 변수명 파싱이 깨져 "unbound variable" 이 난다 —
+`"${VAR}개"` 로 중괄호 필수.
+
 ### 남은 수동 검증
 
-- [ ] 앱 삭제 후 재설치 → `OnboardingView` 재등장 (`privacy reset` 으로는 앱 재설치까지 안 봄)
-- [ ] iOS 18 `.limited` 권한 (2단계에서 [연락처 선택]) → 허용된 연락처만 보임, 크래시 없음
-- [ ] 로드 완료 전 타이핑 → 로드되는 순간 결과가 즉시 채워짐
-- [ ] cold boot 150ms 이내 → 스피너 안 뜸 (D2 임계치 확인)
+- [ ] 로드 완료 전 타이핑 → 로드되는 순간 결과가 즉시 채워짐 (테스트 미작성)
+- [ ] cold boot 150ms 이내 → 스피너 안 뜸 (D2 임계치 확인, 테스트 미작성)
 - [ ] 로드 실패 시뮬레이션 → 에러 뷰 + 다시 시도 동작
-- [ ] 다크모드/라이트모드 전환 → 시스템 따라 자동 변경
-- [ ] Dynamic Type 최대(`.accessibility5`)에서 레이아웃 안 깨짐
-- [ ] VoiceOver 에서 각 행이 "이름, 연락처 상세 열기" 로 읽힘 (요소 트리상으로는 확인됨)
-- [ ] 연락처 0개 / 5000개 각각 크래시 없음 + 5000개에서 2초 목표 유지
-- [ ] iPhone SE (375pt) 와 Pro Max (430pt) 두 뷰포트에서 동일 동작
+      (`CNContactStore` 를 외부에서 실패시킬 훅이 앱 코드에 없어 자동화 불가 — 훅을 넣을지, 수동으로
+      남길지 결정 필요)
 
 ### 4-1. 한국어 로컬라이제이션 ✅ 완료
 

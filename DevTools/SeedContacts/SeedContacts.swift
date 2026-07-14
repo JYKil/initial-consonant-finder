@@ -59,6 +59,60 @@ final class SeedContacts: XCTestCase {
     XCTAssertEqual(total, Self.fixtures.count + 1)
   }
 
+  /// 4단계 스케일 검증: 연락처 0개. 크래시 없이 빈 목록으로 뜨는지 확인용.
+  func test_seedEmpty() throws {
+    let store = CNContactStore()
+    XCTAssertEqual(
+      CNContactStore.authorizationStatus(for: .contacts), .authorized,
+      "먼저 실행: xcrun simctl privacy booted grant contacts com.kilga.InitialConsonantFinder")
+
+    try wipeAll(in: store)
+    XCTAssertEqual(try count(in: store), 0)
+    print("✅ 시딩 완료 — 연락처 0개")
+  }
+
+  /// 4단계 스케일 검증: 연락처 5000개. cold boot ~2초 목표 확인용 데이터.
+  /// "ㄱㅇㅎ" 로 걸리는 확정 픽스처 하나를 섞어서 대량 데이터에서도 검색이 되는지 함께 확인한다.
+  func test_seedLarge() throws {
+    let store = CNContactStore()
+    XCTAssertEqual(
+      CNContactStore.authorizationStatus(for: .contacts), .authorized,
+      "먼저 실행: xcrun simctl privacy booted grant contacts com.kilga.InitialConsonantFinder")
+
+    try wipeAll(in: store)
+
+    let families = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임"]
+    let givens = ["민준", "서연", "도윤", "하은", "시우", "지호", "수아", "예준", "지우", "은호"]
+
+    let total = 5000
+    let batchSize = 500
+    var inserted = 0
+    while inserted < total {
+      let save = CNSaveRequest()
+      let end = min(inserted + batchSize, total)
+      for i in inserted..<end {
+        let contact = CNMutableContact()
+        contact.familyName = families[i % families.count]
+        // 유니크성 확보를 위해 인덱스를 이름 뒤에 붙인다 (초성 추출에는 영향 없음 — 숫자는 그대로 유지).
+        contact.givenName = "\(givens[(i / families.count) % givens.count])\(i)"
+        save.add(contact, toContainerWithIdentifier: nil)
+      }
+      // 검색 확정 픽스처 — 정확히 한 번만 삽입.
+      if inserted == 0 {
+        let marker = CNMutableContact()
+        marker.familyName = "김"
+        marker.givenName = "용훈"
+        save.add(marker, toContainerWithIdentifier: nil)
+      }
+      try store.execute(save)
+      inserted = end
+    }
+
+    let finalCount = try count(in: store)
+    print("✅ 시딩 완료 — 연락처 \(finalCount)개")
+    XCTAssertEqual(finalCount, total + 1)
+  }
+
   private func wipeAll(in store: CNContactStore) throws {
     let request = CNContactFetchRequest(keysToFetch: [CNContactIdentifierKey as CNKeyDescriptor])
     var doomed: [CNContact] = []
