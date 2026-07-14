@@ -88,23 +88,31 @@
 
 디자인 결정은 plan.md 의 "디자인 시스템: iOS HIG", "화면 구조", "상태별 화면 매트릭스", "사용자 여정", "접근성 & 반응형" 섹션을 최종 참조.
 
-**진행 상태:** 3-2 ~ 3-7 Swift 소스는 `App/` staging 폴더에 작성 완료 (커밋 `e3518c7`). 3-1 (Xcode 프로젝트 생성, 서명, Package 의존, Info.plist) 은 Xcode GUI 작업이라 사용자가 직접 수행. 상세 스텝은 `App/README.md` 참조.
+**진행 상태:** 완료. 앱이 시뮬레이터에서 실제로 돌아가고 초성 검색이 동작한다.
 
-### 3-1. Xcode 프로젝트 & 앱 타겟 생성 ⚠️ **사용자 GUI 작업 필요**
-- [ ] Xcode → File → New → Project → iOS App
-  - Product Name: `InitialConsonantFinder`
-  - Team: 본인 Apple ID (Personal Team)
-  - Organization Identifier: 예) `com.kilga`
-  - Interface: SwiftUI, Language: Swift, Storage: None
-  - Include Tests 체크 해제
-- [ ] 저장 위치: 이 레포 루트, "Create Git Repository" 체크 해제
-- [ ] Target → General → Minimum Deployments: iOS 17.0
-- [ ] Target → Info → `Privacy - Contacts Usage Description` 추가, 값은 plan.md 필수 Info.plist 키 섹션 참조
-- [ ] File → Add Package Dependencies → Add Local → 레포 루트 선택 → `KoreanInitialMatcher` + `ContactFinder` 둘 다 체크
-- [ ] `App/` 의 6개 Swift 파일을 프로젝트 네비게이터로 드래그 (Create groups, Add to target: InitialConsonantFinder)
-- [ ] Xcode 자동 생성한 `InitialConsonantFinderApp.swift` + `ContentView.swift` 삭제 (Move to Trash)
-- [ ] `Cmd+B` → 빌드 성공
-- [ ] (빌드 성공 후) `App/` staging 폴더 정리 — `rm -rf App/` + 커밋
+**중요 — 기존 계획의 틀린 전제를 정정함:** "Xcode 프로젝트는 CLI 로 만들 수 없어서 GUI 작업이 필요하다" 는 틀렸다.
+1. **XcodeGen** 으로 `.xcodeproj` 를 선언적으로 생성한다 (`project.yml`).
+2. **시뮬레이터 빌드·실행에는 서명 팀이 아예 필요 없다.** Personal Team 서명은 5단계(실기기)에서 처음 필요하다.
+
+따라서 3~4단계는 Xcode GUI 없이 전부 CLI 로 돌아간다. Xcode 를 처음 여는 시점은 5단계다.
+
+### 3-1. Xcode 프로젝트 & 앱 타겟 생성 (XcodeGen)
+- [x] `brew install xcodegen`
+- [x] `project.yml` 작성 — 앱 타겟 + 로컬 Swift Package 의존(`KoreanInitialMatcher`, `ContactFinder`)
+- [x] iOS 17.0 최소 배포 타겟, 번들 ID `com.kilga.InitialConsonantFinder`, iPhone 전용
+- [x] `INFOPLIST_KEY_NSContactsUsageDescription` 을 빌드 설정으로 주입 (별도 Info.plist 파일 없음)
+- [x] `App/` staging → `InitialConsonantFinder/` 로 이동, 구식 `App/README.md` 삭제
+- [x] `.xcodeproj` 는 `.gitignore` 처리 — `project.yml` 이 진실의 원천. 클론 후 `xcodegen generate` 로 복원
+- [x] `xcodebuild ... build` → **빌드 성공, 에러/경고 0개** (Swift 6 strict concurrency 통과)
+
+### 재현 방법 (클론 직후)
+
+```bash
+brew install xcodegen
+xcodegen generate
+xcodebuild -scheme InitialConsonantFinder \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+```
 
 ### 3-2. `@main` 앱 엔트리 (권한 상태 머신 4갈래)
 - [x] `App/InitialConsonantFinderApp.swift` — 작성 완료
@@ -149,7 +157,12 @@
   - [x] `CNContactStore().unifiedContact(withIdentifier:keysToFetch:)` 재조회
   - [x] `keysToFetch = [CNContactViewController.descriptorForRequiredKeys()]`
   - [x] 조회 실패 시 "연락처를 불러올 수 없어요" 폴백 뷰
-  - [x] `UINavigationController(rootViewController:)` 로 감쌈 + 우상단 `.done` 버튼
+  - [x] `UINavigationController(rootViewController:)` 로 감쌈
+  - [x] ~~우상단 `.done` 버튼~~ → **좌상단 "완료" 버튼으로 수정함 (실제 버그였음)**
+    - `allowsEditing = true` 인 `CNContactViewController` 는 자기 "Edit" 버튼으로 `rightBarButtonItem` 을 **덮어쓴다.**
+      그래서 완료 버튼이 화면에 아예 없었고, 시트를 스와이프로만 닫을 수 있었다.
+    - 오른쪽은 Edit 이 점유 → 완료는 `leftBarButtonItem` 으로. iOS 관례에도 맞다.
+    - 시스템 `.done` 아이템은 앱에 한국어 로컬라이제이션이 없어 "Done" 으로 뜬다 → 제목을 `"완료"` 로 직접 지정.
   - [x] `Coordinator` 로 `@Environment(\.dismiss)` 연결
   - [x] `allowsEditing = true`, `allowsActions = true`
 
@@ -171,28 +184,59 @@
 
 ## 4단계: 시뮬레이터 검증
 
-- [ ] Xcode에서 `Cmd+U`로 `KoreanInitialMatcher` 테스트 실행 → 전부 초록 (iOS 앱이 로컬 패키지를 올바르게 의존하는지 확인)
+**진행 상태:** 핵심 경로는 XCUITest 로 자동화해서 통과시킴 (`DevTools/UITests/`). 나머지는 수동.
+
+### 검증 환경 준비 (연락처 시딩)
+
+시뮬레이터 연락처는 `simctl` 로 직접 못 넣는다. vCard 를 `simctl openurl` 로 열면 임포트 시트가 뜨지만
+"저장"을 **손으로 눌러야** 해서 자동화가 안 된다. 그래서 앱을 호스트로 하는 테스트 타겟(`DevTools/SeedContacts/`)이
+`CNSaveRequest` 로 직접 픽스처를 넣는다 (앱 번들 ID 의 연락처 권한을 물려받는다).
+
+```bash
+xcrun simctl boot "iPhone 17"
+xcrun simctl privacy booted grant contacts com.kilga.InitialConsonantFinder
+xcodebuild test -scheme SeedContacts -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme UITests     -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+
+⚠️ `SeedContacts` 는 **연락처를 전부 지우고** 픽스처로 덮어쓴다. 실기기에서 절대 돌리지 말 것.
+
+### 자동화 완료 (XCUITest 5개 통과)
+
+- [x] 앱 실행 시 검색바 자동 포커스 + 한글 키보드 즉시 올라옴
+- [x] "ㅇㅎ" 입력 → 김용훈 / 박윤희 / 이은호만 필터, 김철수·John Smith 제외
+- [x] 빈 query → 빈 리스트 (문구 없음)
+- [x] 매칭 없는 query("ㅋㅋㅋ") → 빈 리스트
+- [x] 결과 셀 탭 → `CNContactViewController` 시트가 기본 연락처 앱과 동일한 UI로 뜸 (전화/문자/영상/메일 버튼 정상)
+- [x] 시트 "완료" 탭 → 닫히고 검색 쿼리 유지
+- [x] 한자("강民秀") / 이모지("한소리🌸") 이름 크래시 없음 (시딩 픽스처에 포함)
+
+### 남은 수동 검증
+
 - [ ] 앱 첫 실행 → `OnboardingView` → [시작하기] → iOS 시스템 팝업 → 검색 화면
-- [ ] 앱 두 번째 실행 → `OnboardingView` 스킵, 바로 검색 화면 (평생 1회 보장 확인)
-- [ ] 앱 삭제 후 재설치 → `OnboardingView` 재등장 (권한 상태 리셋 확인)
-- [ ] 앱 실행 시 검색바 상단 자동 포커스 + 키보드 즉시 올라옴
-- [ ] "ㅇㅎ" 입력 시 해당 연락처만 필터됨
-- [ ] 빈 query → 빈 리스트 (문구 표시 없음, 기본 상태)
-- [ ] 매칭 없는 query → 빈 리스트 (문구 표시 없음)
+      (자동화하려면 `springboard` 권한 팝업 처리 필요 — `addUIInterruptionMonitor`)
+- [ ] 앱 두 번째 실행 → `OnboardingView` 스킵 (평생 1회 보장)
+- [ ] 앱 삭제 후 재설치 → `OnboardingView` 재등장
+- [ ] 권한 거부 → `PermissionDeniedView` 표시, "설정 열기" 버튼 동작
+      (`xcrun simctl privacy booted revoke contacts com.kilga.InitialConsonantFinder`)
+- [ ] iOS 18 `.limited` 권한 → 허용된 연락처만 보임 (크래시 없음)
 - [ ] 로드 완료 전 타이핑 → 로드되는 순간 결과가 즉시 채워짐
 - [ ] cold boot 150ms 이내 → 스피너 안 뜸 (D2 임계치 확인)
-- [ ] 로드 실패 시뮬레이션 (Info.plist 키 임시 제거 등) → 에러 뷰 + 다시 시도 동작
-- [ ] 결과 셀 탭 → `CNContactViewController` 시트가 기본 연락처 앱과 동일한 UI로 뜸
-- [ ] 시트 안의 전화/문자/이메일 버튼이 네이티브로 동작 (시뮬레이터는 실제 통화 불가, URL 핸드오프만 확인 — 실제 통화는 5단계 실기기에서)
-- [ ] 시트 닫기 → 검색 쿼리와 키보드 포커스 유지, 연속 검색 가능
-- [ ] 권한 거부 → `PermissionDeniedView` 표시, "설정 열기" 버튼 동작
-- [ ] iOS 18 `.limited` 권한 → 허용된 연락처만 보임 (크래시 없음)
-- [ ] 다크모드/라이트모드 전환 → 시스템 따라 자동 변경 (`preferredColorScheme` 미지정 확인)
-- [ ] Dynamic Type 을 최대(`.accessibility5`)로 올려도 레이아웃 깨지지 않음
-- [ ] VoiceOver 에서 각 행이 "이름, 연락처 상세 열기" 로 읽힘
-- [ ] 검색바는 VoiceOver 에서 "검색" 으로 읽힘
-- [ ] 연락처 0개/5000개/한자 이름/이모지 이름 각각 크래시 없음
+- [ ] 로드 실패 시뮬레이션 → 에러 뷰 + 다시 시도 동작
+- [ ] 다크모드/라이트모드 전환 → 시스템 따라 자동 변경
+- [ ] Dynamic Type 최대(`.accessibility5`)에서 레이아웃 안 깨짐
+- [ ] VoiceOver 에서 각 행이 "이름, 연락처 상세 열기" 로 읽힘 (요소 트리상으로는 확인됨)
+- [ ] 연락처 0개 / 5000개 각각 크래시 없음 + 5000개에서 2초 목표 유지
 - [ ] iPhone SE (375pt) 와 Pro Max (430pt) 두 뷰포트에서 동일 동작
+
+### 4-1. 한국어 로컬라이제이션 (신규 — 실행해보고 드러난 문제)
+
+앱에 한국어 로컬라이제이션이 없어서 **시스템 UIKit 문자열이 전부 영어로 폴백**한다.
+상세 시트 우상단 버튼이 "Edit" 으로 뜬다 (한국어 앱인데 영어 버튼).
+
+- [ ] `CFBundleDevelopmentRegion` 을 `ko` 로 설정하거나 `ko.lproj` 추가
+- [ ] 상세 시트의 "Edit" 이 "편집" 으로 뜨는지 확인
+- [ ] 검색바 VoiceOver 라벨이 "검색" 으로 읽히는지 확인 (현재 "Search")
 
 ## 5단계: 실기기 테스트
 

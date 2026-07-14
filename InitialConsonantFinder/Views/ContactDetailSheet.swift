@@ -29,8 +29,11 @@ struct ContactDetailSheet: UIViewControllerRepresentable {
       let detailVC = CNContactViewController(for: cnContact)
       detailVC.allowsEditing = true
       detailVC.allowsActions = true
-      detailVC.navigationItem.rightBarButtonItem = UIBarButtonItem(
-        barButtonSystemItem: .done,
+      // 오른쪽은 CNContactViewController 가 자기 "Edit" 버튼으로 덮어쓴다. 완료는 왼쪽에 둔다.
+      // 앱에 한국어 로컬라이제이션이 없어서 시스템 .done 은 "Done" 으로 뜬다 → 제목을 직접 지정.
+      detailVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
+        title: "완료",
+        style: .done,
         target: context.coordinator,
         action: #selector(Coordinator.doneTapped)
       )
@@ -51,8 +54,9 @@ struct ContactDetailSheet: UIViewControllerRepresentable {
         label.centerYAnchor.constraint(equalTo: errorVC.view.centerYAnchor)
       ])
 
-      errorVC.navigationItem.rightBarButtonItem = UIBarButtonItem(
-        barButtonSystemItem: .done,
+      errorVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
+        title: "완료",
+        style: .done,
         target: context.coordinator,
         action: #selector(Coordinator.doneTapped)
       )

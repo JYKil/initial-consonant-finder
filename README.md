@@ -17,16 +17,37 @@
 - **언어:** Swift 5.9+
 - **UI:** SwiftUI
 - **프레임워크:** `Contacts.framework` (연락처 읽기), `MessageUI` (문자 발송), `UIApplication` (전화)
-- **최소 iOS:** 16.0
+- **최소 iOS:** 17.0
 - **외부 의존성:** 없음 (로컬 전용, 서버 통신 없음)
 
 ## 빌드 방법
 
+`.xcodeproj` 는 커밋하지 않는다. [XcodeGen](https://github.com/yonaskolb/XcodeGen) 이 `project.yml` 로부터 생성한다.
+
 ```bash
-# Xcode 15+ 필요
-open InitialConsonantFinder.xcodeproj
-# Cmd+R 로 시뮬레이터 실행
+brew install xcodegen
+xcodegen generate
+
+# 알고리즘 / 필터 단위 테스트 (Xcode 없이)
+swift test
+
+# 앱 빌드
+xcodebuild -scheme InitialConsonantFinder \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
+
+시뮬레이터 빌드에는 서명 팀이 필요 없다. Personal Team 서명은 실기기 설치 때만 필요하다.
+
+### 시뮬레이터에서 검색 검증
+
+```bash
+xcrun simctl boot "iPhone 17"
+xcrun simctl privacy booted grant contacts com.kilga.InitialConsonantFinder
+xcodebuild test -scheme SeedContacts -destination 'platform=iOS Simulator,name=iPhone 17'  # 연락처 픽스처 시딩
+xcodebuild test -scheme UITests      -destination 'platform=iOS Simulator,name=iPhone 17'  # 초성 검색 E2E
+```
+
+⚠️ `SeedContacts` 는 시뮬레이터 연락처를 전부 지우고 픽스처로 덮어쓴다. 실기기에서 돌리지 말 것.
 
 ## 상태
 

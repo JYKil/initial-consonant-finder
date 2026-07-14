@@ -8,6 +8,10 @@ build/
 *.xcscmblueprint
 *.xccheckout
 
+# XcodeGen 이 생성한다. project.yml 이 진실의 원천 → 커밋하지 않는다.
+# 클론 후 `xcodegen generate` 로 복원.
+*.xcodeproj
+
 # Swift Package Manager
 .build/
 .swiftpm/
