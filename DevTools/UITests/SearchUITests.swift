@@ -55,6 +55,22 @@ final class SearchUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["김철수"].exists)
   }
 
+  /// 앱이 한국어 로케일로 돌아야 UIKit 시스템 문자열이 한국어로 나온다.
+  /// ko.lproj 가 빠지면 VoiceOver 가 검색 아이콘을 "Search" 로 읽는다.
+  func test_시스템_문자열이_한국어다() {
+    let field = app.searchFields.firstMatch
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+
+    XCTAssertTrue(
+      field.images["magnifyingglass"].label.contains("검색"),
+      "검색 아이콘 라벨이 한국어가 아니다: \(field.images["magnifyingglass"].label)")
+
+    field.typeText("ㄱ")
+    XCTAssertTrue(
+      field.buttons["텍스트 지우기"].waitForExistence(timeout: 3),
+      "'Clear text' 가 한국어로 안 뜬다 — ko 로컬라이제이션 확인")
+  }
+
   /// 결과 탭 → CNContactViewController 시트가 뜨는지.
   func test_결과탭하면_연락처_상세시트가_뜬다() {
     let field = app.searchFields.firstMatch
@@ -71,6 +87,11 @@ final class SearchUITests: XCTestCase {
 
     let done = app.buttons["완료"]
     XCTAssertTrue(done.waitForExistence(timeout: 3), "완료 버튼이 없다")
+
+    // CNContactViewController 가 소유한 버튼. ko.lproj 가 없으면 "Edit" 으로 뜬다.
+    XCTAssertTrue(sheetBar.buttons["편집"].exists, "Edit 버튼이 한국어로 안 뜬다 — ko 로컬라이제이션 확인")
+    XCTAssertFalse(sheetBar.buttons["Edit"].exists, "Edit 버튼이 아직 영어다")
+
     attachScreenshot(named: "detail-sheet")
 
     // 시트를 닫으면 검색 쿼리가 유지된 채 검색 화면으로 돌아와야 한다.

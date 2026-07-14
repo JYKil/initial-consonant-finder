@@ -7,6 +7,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  # 한국어 전용 앱. 이걸 en 으로 두면 iOS 가 앱을 영어 로케일로 돌려서
+  # UIKit 시스템 문자열이 전부 영어로 뜬다 (상세 시트 "Edit", 검색바 "Search").
+  # InitialConsonantFinder/ko.lproj/ 와 반드시 함께 있어야 효과가 있다.
+  developmentLanguage: ko
 
 packages:
   # 레포 루트의 Swift Package (KoreanInitialMatcher + ContactFinder 두 라이브러리)

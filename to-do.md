@@ -229,14 +229,28 @@ xcodebuild test -scheme UITests     -destination 'platform=iOS Simulator,name=iP
 - [ ] 연락처 0개 / 5000개 각각 크래시 없음 + 5000개에서 2초 목표 유지
 - [ ] iPhone SE (375pt) 와 Pro Max (430pt) 두 뷰포트에서 동일 동작
 
-### 4-1. 한국어 로컬라이제이션 (신규 — 실행해보고 드러난 문제)
+### 4-1. 한국어 로컬라이제이션 ✅ 완료
 
-앱에 한국어 로컬라이제이션이 없어서 **시스템 UIKit 문자열이 전부 영어로 폴백**한다.
-상세 시트 우상단 버튼이 "Edit" 으로 뜬다 (한국어 앱인데 영어 버튼).
+**증상:** 앱에 한국어 로컬라이제이션이 없어서 시스템 UIKit 문자열이 전부 영어로 폴백했다.
+상세 시트 우상단이 "Edit", 검색 아이콘 VoiceOver 라벨이 "Search", 지우기 버튼이 "Clear text".
 
-- [ ] `CFBundleDevelopmentRegion` 을 `ko` 로 설정하거나 `ko.lproj` 추가
-- [ ] 상세 시트의 "Edit" 이 "편집" 으로 뜨는지 확인
-- [ ] 검색바 VoiceOver 라벨이 "검색" 으로 읽히는지 확인 (현재 "Search")
+**원인:** 빌드된 번들에 `CFBundleDevelopmentRegion = en` 이고 `.lproj` 디렉터리가 **하나도 없었다.**
+iOS 는 앱이 지원하는 로컬라이제이션 목록으로 앱의 실행 로케일을 정하는데, 지원 언어가 영어뿐이니
+앱 전체가 영어 로케일로 돌았다. 앱 자체 문구는 한국어 리터럴이라 안 드러났고, **UIKit 이 그리는
+문자열만** 영어로 나왔다.
+
+**해결 (둘 다 있어야 효과가 있다):**
+- [x] `project.yml` → `options.developmentLanguage: ko` (`CFBundleDevelopmentRegion = ko`)
+- [x] `InitialConsonantFinder/ko.lproj/InfoPlist.strings` 추가 — 이 **디렉터리의 존재 자체가**
+      "한국어 지원" 선언이다. 빌드 설정만 바꾸고 `.lproj` 가 없으면 안 먹는다.
+- [x] `NSContactsUsageDescription` 을 `InfoPlist.strings` 로 이관 (빌드 설정 키는 폴백으로 유지)
+- [x] 상세 시트 "Edit" → **"편집"** 으로 뜨는 것 확인 (스크린샷)
+- [x] 검색 아이콘 라벨 "Search" → **"검색"**, 지우기 버튼 → **"텍스트 지우기"**
+- [x] XCUITest `test_시스템_문자열이_한국어다` 로 회귀 방지 못박음
+
+**주의:** 이 앱은 한국어 **전용**이다 (초성 검색이라는 기능 자체가 한글 전제). 영어 로케일 기기에서도
+`developmentLanguage: ko` 폴백으로 한국어가 뜬다 — 의도한 동작이다. 다국어를 지원할 계획이 생기면
+`en.lproj` 를 추가하고 앱 내 한국어 리터럴부터 `Localizable.xcstrings` 로 빼야 한다.
 
 ## 5단계: 실기기 테스트
 
