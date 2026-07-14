@@ -186,40 +186,57 @@ xcodebuild -scheme InitialConsonantFinder \
 
 **진행 상태:** 핵심 경로는 XCUITest 로 자동화해서 통과시킴 (`DevTools/UITests/`). 나머지는 수동.
 
-### 검증 환경 준비 (연락처 시딩)
-
-시뮬레이터 연락처는 `simctl` 로 직접 못 넣는다. vCard 를 `simctl openurl` 로 열면 임포트 시트가 뜨지만
-"저장"을 **손으로 눌러야** 해서 자동화가 안 된다. 그래서 앱을 호스트로 하는 테스트 타겟(`DevTools/SeedContacts/`)이
-`CNSaveRequest` 로 직접 픽스처를 넣는다 (앱 번들 ID 의 연락처 권한을 물려받는다).
+### 실행 방법
 
 ```bash
-xcrun simctl boot "iPhone 17"
-xcrun simctl privacy booted grant contacts com.kilga.InitialConsonantFinder
-xcodebuild test -scheme SeedContacts -destination 'platform=iOS Simulator,name=iPhone 17'
-xcodebuild test -scheme UITests     -destination 'platform=iOS Simulator,name=iPhone 17'
+./DevTools/verify.sh
 ```
+
+권한 상태(`notDetermined` / `denied` / `authorized`)는 테스트 프로세스 안에서 못 바꾼다 (`simctl` 은 호스트 도구).
+그래서 `verify.sh` 가 상태를 세팅하고 해당 테스트만 골라 실행한다.
+
+연락처 시딩도 `simctl` 로는 못 한다. vCard 를 `simctl openurl` 로 열면 임포트 시트가 뜨지만
+"저장"을 **손으로 눌러야** 해서 자동화가 안 된다. 그래서 앱을 호스트로 하는 테스트 타겟
+(`DevTools/SeedContacts/`)이 `CNSaveRequest` 로 직접 픽스처를 넣는다.
 
 ⚠️ `SeedContacts` 는 **연락처를 전부 지우고** 픽스처로 덮어쓴다. 실기기에서 절대 돌리지 말 것.
 
-### 자동화 완료 (XCUITest 5개 통과)
+### ⚠️ iOS 18+ 연락처 권한은 2단계다 (검증하다 알게 된 것)
 
+1. **알림**: "…연락처에 접근하려고 합니다" → `[허용 안 함]` / `[계속]`
+2. **시트**: "연락처를 어떻게 공유하겠습니까?" → `[연락처 선택]` / `[N개의 연락처 모두 공유]`
+
+`CNContactStore.requestAccess` 의 completion 은 **2단계까지 끝나야** 온다. 그전까지 앱이 온보딩에
+머물고 [시작하기] 가 disabled 로 남아 있는 건 **정상 동작**이다 (앱 버그가 아님 — 한 번 오진했다).
+
+2단계 시트는 자동화할 때 함정이 셋 있다:
+- `springboard.alerts` 로 안 잡힌다 (alert 가 아니라 sheet). `springboard.buttons` 로 잡아야 한다.
+- 1단계보다 **몇 초 늦게** 뜬다. 3초 대기로는 못 잡는다.
+- 앱 프로세스 트리에도 안 보인다 → `app.debugDescription` 으로 디버깅하면 아무것도 안 나온다.
+- 버튼 라벨에 연락처 개수가 박힌다("9개의 연락처 모두 공유") → 술어 매칭 필수.
+  연락처가 0개면 문구가 달라지므로 **시딩을 권한 테스트보다 먼저** 해야 한다.
+
+### 자동화 완료 (XCUITest 9개 통과)
+
+권한 상태 머신:
+- [x] `notDetermined` → `OnboardingView` → [시작하기] → 시스템 팝업 2단계 → 검색 화면
+- [x] 권한 알림에 한국어 사용 목적 설명이 뜸 (ko.lproj 확인)
+- [x] `authorized` → `OnboardingView` 스킵, 바로 검색 화면 (평생 1회 보장)
+- [x] `denied` → `PermissionDeniedView` + "설정 열기" 버튼
+
+검색:
 - [x] 앱 실행 시 검색바 자동 포커스 + 한글 키보드 즉시 올라옴
 - [x] "ㅇㅎ" 입력 → 김용훈 / 박윤희 / 이은호만 필터, 김철수·John Smith 제외
-- [x] 빈 query → 빈 리스트 (문구 없음)
-- [x] 매칭 없는 query("ㅋㅋㅋ") → 빈 리스트
-- [x] 결과 셀 탭 → `CNContactViewController` 시트가 기본 연락처 앱과 동일한 UI로 뜸 (전화/문자/영상/메일 버튼 정상)
+- [x] 빈 query / 매칭 없는 query("ㅋㅋㅋ") → 빈 리스트 (문구 없음)
+- [x] 결과 셀 탭 → `CNContactViewController` 시트 (전화/문자/영상/메일 버튼 정상)
 - [x] 시트 "완료" 탭 → 닫히고 검색 쿼리 유지
+- [x] 시스템 문자열 한국어 확인 (편집 / 검색 / 텍스트 지우기)
 - [x] 한자("강民秀") / 이모지("한소리🌸") 이름 크래시 없음 (시딩 픽스처에 포함)
 
 ### 남은 수동 검증
 
-- [ ] 앱 첫 실행 → `OnboardingView` → [시작하기] → iOS 시스템 팝업 → 검색 화면
-      (자동화하려면 `springboard` 권한 팝업 처리 필요 — `addUIInterruptionMonitor`)
-- [ ] 앱 두 번째 실행 → `OnboardingView` 스킵 (평생 1회 보장)
-- [ ] 앱 삭제 후 재설치 → `OnboardingView` 재등장
-- [ ] 권한 거부 → `PermissionDeniedView` 표시, "설정 열기" 버튼 동작
-      (`xcrun simctl privacy booted revoke contacts com.kilga.InitialConsonantFinder`)
-- [ ] iOS 18 `.limited` 권한 → 허용된 연락처만 보임 (크래시 없음)
+- [ ] 앱 삭제 후 재설치 → `OnboardingView` 재등장 (`privacy reset` 으로는 앱 재설치까지 안 봄)
+- [ ] iOS 18 `.limited` 권한 (2단계에서 [연락처 선택]) → 허용된 연락처만 보임, 크래시 없음
 - [ ] 로드 완료 전 타이핑 → 로드되는 순간 결과가 즉시 채워짐
 - [ ] cold boot 150ms 이내 → 스피너 안 뜸 (D2 임계치 확인)
 - [ ] 로드 실패 시뮬레이션 → 에러 뷰 + 다시 시도 동작
