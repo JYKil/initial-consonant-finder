@@ -374,6 +374,18 @@ iOS 는 앱이 지원하는 로컬라이제이션 목록으로 앱의 실행 로
 - [x] **3. 편집 후 바로 반영 안 되는 문제** — `ContactStore.init`에서 `CNContactStoreDidChange` 알림을
       구독해 어디서든(상세 시트의 편집/삭제 포함) 연락처 DB가 바뀌면 자동으로 `loadAll()`을 재호출하도록
       구현 (시트 닫힘 감지보다 더 정석적인 방법 — 삭제 등 다른 변경 경로도 함께 커버됨).
+- [x] **7. 리스트에서 왼쪽으로 스와이프해 바로 삭제** — 상세 시트까지 안 들어가고 검색 결과 목록에서
+      바로 삭제할 수 있게 요청됨(기본 연락처/음악 앱 등의 스와이프-삭제 패턴 참고).
+      `Sources/ContactFinder/ContactStore.swift`에 `delete(_ contact:)` 추가 — `ContactDetailSheet`의
+      기존 삭제 로직(`CNSaveRequest().delete`)과 동일한 방식이나, `CNContactViewController`(UIKit/ContactsUI)
+      의존 없이 `CNContactIdentifierKey`만 조회하도록 분리해 이 라이브러리의 macOS 타겟도 계속 빌드되게 함.
+      `InitialConsonantFinder/Views/ContactSearchView.swift`의 `resultsList`에
+      `.swipeActions(edge: .trailing, allowsFullSwipe: true)`로 빨간 "삭제" 버튼 추가 →
+      탭하면 확인 얼럿(연락처 이름 표시) → 확인 시 `store.delete()` 호출. 삭제 성공 시엔
+      `CNContactStoreDidChange` 구독이 자동으로 목록을 재로드하므로 별도 로컬 상태 갱신 불필요.
+      삭제 실패 시 별도 얼럿으로 에러 메시지 표시.
+      `swift build` + `xcodebuild ... build` 둘 다 성공 확인. XCUITest 회귀는 아직 안 돌림 — 실기기에서
+      스와이프 삭제 확인 필요.
 
 ## 6단계: TestFlight 배포
 

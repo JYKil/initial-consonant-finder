@@ -13,6 +13,8 @@ struct ContactSearchView: View {
   @State private var selectedContact: Contact?
   @State private var showSpinner = false
   @State private var isSearchActive = true
+  @State private var contactPendingDelete: Contact?
+  @State private var deleteErrorMessage: String?
 
   var body: some View {
     NavigationStack {
@@ -34,6 +36,33 @@ struct ContactSearchView: View {
         }
         .task(id: isLoading) {
           await updateSpinnerVisibility()
+        }
+        .alert(
+          "연락처를 삭제할까요?",
+          isPresented: Binding(
+            get: { contactPendingDelete != nil },
+            set: { if !$0 { contactPendingDelete = nil } }
+          ),
+          presenting: contactPendingDelete
+        ) { contact in
+          Button("취소", role: .cancel) {}
+          Button("삭제", role: .destructive) {
+            deleteContact(contact)
+          }
+        } message: { contact in
+          Text("\(contact.displayName)이(가) 기기에서 완전히 삭제됩니다.")
+        }
+        .alert(
+          "삭제 실패",
+          isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: { if !$0 { deleteErrorMessage = nil } }
+          ),
+          presenting: deleteErrorMessage
+        ) { _ in
+          Button("확인", role: .cancel) {}
+        } message: { message in
+          Text(message)
         }
     }
   }
@@ -66,9 +95,26 @@ struct ContactSearchView: View {
         .onTapGesture { selectedContact = contact }
         .listRowSeparator(.visible)
         .listRowInsets(.init(top: 2, leading: 16, bottom: 2, trailing: 16))
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+          Button(role: .destructive) {
+            contactPendingDelete = contact
+          } label: {
+            Label("삭제", systemImage: "trash")
+          }
+        }
     }
     .listStyle(.plain)
     .environment(\.defaultMinListRowHeight, 40)
+  }
+
+  private func deleteContact(_ contact: Contact) {
+    Task {
+      do {
+        try await store.delete(contact)
+      } catch {
+        deleteErrorMessage = error.localizedDescription
+      }
+    }
   }
 
   private var loadingView: some View {

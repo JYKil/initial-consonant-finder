@@ -83,6 +83,29 @@ public final class ContactStore: ObservableObject {
     }
   }
 
+  /// 연락처 하나를 기기에서 완전히 삭제한다.
+  ///
+  /// 삭제 성공 시 `CNContactStoreDidChange` 알림이 발생해 `init` 의 구독이 자동으로
+  /// `loadAll()` 을 재호출하므로, 여기서 `contacts` 를 직접 갱신할 필요는 없다.
+  public func delete(_ contact: Contact) async throws {
+    try await Self.deleteContact(withIdentifier: contact.id)
+  }
+
+  private static func deleteContact(withIdentifier id: String) async throws {
+    let store = CNContactStore()
+    // 삭제는 CNMutableContact 의 identifier 만 있으면 되므로 최소 키만 조회한다
+    // (ContactsUI 의 CNContactViewController.descriptorForRequiredKeys() 는 UIKit
+    // 의존이라 이 라이브러리(macOS 도 지원)에서는 쓰지 않는다).
+    let existing = try store.unifiedContact(
+      withIdentifier: id,
+      keysToFetch: [CNContactIdentifierKey as CNKeyDescriptor]
+    )
+    guard let mutable = existing.mutableCopy() as? CNMutableContact else { return }
+    let request = CNSaveRequest()
+    request.delete(mutable)
+    try store.execute(request)
+  }
+
   /// MainActor 에 격리되지 않은 정적 헬퍼.
   /// `async` 이므로 호출 시 협력 스레드 풀로 디스패치되어 메인을 블록하지 않는다.
   private static func fetchAllContacts() async throws -> [Contact] {
