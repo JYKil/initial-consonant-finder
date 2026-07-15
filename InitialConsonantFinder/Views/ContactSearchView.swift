@@ -65,8 +65,10 @@ struct ContactSearchView: View {
         .contentShape(Rectangle())
         .onTapGesture { selectedContact = contact }
         .listRowSeparator(.visible)
+        .listRowInsets(.init(top: 2, leading: 16, bottom: 2, trailing: 16))
     }
     .listStyle(.plain)
+    .environment(\.defaultMinListRowHeight, 40)
   }
 
   private var loadingView: some View {

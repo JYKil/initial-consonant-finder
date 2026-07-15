@@ -18,6 +18,8 @@ public final class ContactStore: ObservableObject {
   @Published public var results: [Contact] = []
   @Published public var loadState: LoadState = .idle
 
+  private var contactStoreChangeCancellable: AnyCancellable?
+
   public init() {
     // query 또는 contacts 가 바뀔 때마다 results 재계산.
     // ContactFilter.apply 는 static 순수 함수라 self 캡처가 없다.
@@ -26,6 +28,15 @@ public final class ContactStore: ObservableObject {
         ContactFilter.apply(contacts, query: query)
       }
       .assign(to: &$results)
+
+    // 편집/삭제/추가 등 시스템 어디서든 연락처 DB 가 바뀌면 CNContactStore 가 이 노티를 쏜다.
+    // 상세 시트의 CNContactViewController 는 자체적으로 저장을 처리하므로, 이 노티를 구독해
+    // contacts 를 재로드하지 않으면 리스트가 stale 한 상태로 남는다.
+    contactStoreChangeCancellable = NotificationCenter.default
+      .publisher(for: .CNContactStoreDidChange)
+      .sink { [weak self] _ in
+        Task { await self?.loadAll() }
+      }
   }
 
   /// 현재 권한 상태를 반환한다.

@@ -347,6 +347,34 @@ iOS 는 앱이 지원하는 로컬라이제이션 목록으로 앱의 실행 로
 - [ ] Instruments Time Profiler로 앱 런치~첫 결과까지 시간 측정 → 2초 목표 확인
 - [ ] 1주일간 매일 실사용 → 기본 연락처 앱으로 돌아가고 싶은지 자가 평가
 
+## 5-1단계: 실기기 사용 중 발견된 버그 (2026-07-16 실사용 피드백)
+
+작업 순서 추천: 1 → 2 → 5 → 3 → 4 (쉬운 것 → 어려운 것 순).
+
+- [ ] **1. 아이콘 이미지 정리** — `AppIcon.appiconset/icon-1024.png` 교체.
+      알파 채널 없이, 둥근 모서리 직접 넣지 말고, 여백 없이 꽉 채운 1024×1024.
+- [x] **2. 줄 간격 줄이기** — `ContactRow`: 원 44×44 → 36으로 축소, `.padding(.vertical, 4)` → 2로.
+      `ContactSearchView`의 리스트에 `.listRowInsets(.init(top:2, leading:16, bottom:2, trailing:16))` +
+      `.environment(\.defaultMinListRowHeight, 40)` 적용 완료.
+- [ ] **4. 블루투스 키보드 연결/해제 시 입력창이 안 뜨는 문제** — `.searchable(isPresented:)`가 하드웨어
+      키보드 연결/해제 때 포커스를 잃고 바인딩이 false로 죽는 SwiftUI 고질 버그로 추정.
+      현재 `onAppear`에서만 `isSearchActive = true`를 주고 있어 복구가 안 됨.
+      1차 처방: `GCKeyboardDidConnect/DidDisconnect` 노티 + `scenePhase` 활성 시점에 `isSearchActive` 재설정.
+      그래도 안 되면 `.searchable` 버리고 직접 `TextField` + `@FocusState`로 전환 (5개 중 제일 지저분함).
+- [x] **5. 편집 시 삭제 기능 누락** — `contactStore` 지정만으로 해결된다는 최초 가설은 **실기기 검증에서
+      틀린 것으로 확인됨**: 지정해도 Edit 모드에 "연락처 삭제" 행이 안 뜸(iOS 18+ 실기기 재현).
+      `CNContactViewController` 는 애초에 삭제 UI를 신뢰성 있게 노출하지 않는 것으로 보고됨.
+      최종 해결: `ContactDetailSheet.swift`에 하단 툴바 버튼("연락처 삭제", 빨간색) 직접 추가 →
+      확인 알림(`UIAlertController`) → `CNSaveRequest().delete(mutableContact)` 로 직접 삭제 실행.
+      `Coordinator` 를 `@MainActor` 로 지정해야 Swift 6 strict concurrency 통과함
+      (CNKeyDescriptor/UIAlertAction 클로저가 non-Sendable이라 nonisolated 컨텍스트에서 에러).
+- [x] **6. 조회 시 연락처 정렬 순서** — 원인: 빈 쿼리일 때만 정렬하고 있었고, 실제 검색(필터링) 결과는
+      `CNContactFetchRequest`의 enumerate 순서(정렬 미보장) 그대로 나갔다.
+      `ContactFilter.apply`에서 필터링 후에도 `localizedStandardCompare`로 가나다순 정렬하도록 수정.
+- [x] **3. 편집 후 바로 반영 안 되는 문제** — `ContactStore.init`에서 `CNContactStoreDidChange` 알림을
+      구독해 어디서든(상세 시트의 편집/삭제 포함) 연락처 DB가 바뀌면 자동으로 `loadAll()`을 재호출하도록
+      구현 (시트 닫힘 감지보다 더 정석적인 방법 — 삭제 등 다른 변경 경로도 함께 커버됨).
+
 ## 6단계: TestFlight 배포
 
 - [ ] Apple Developer Program 가입 ($99/년)
